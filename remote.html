@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>路飞电竞 · 填源遥控器</title>
+<script src="https://cdn.jsdelivr.net/npm/webconnect/dist/umd/webconnect.js"></script>
+<style>
+  body { background:#0d1117; color:#c9d1d9; font-family:sans-serif; padding:30px 20px; display:flex; flex-direction:column; align-items:center; }
+  h2 { color:#58a6ff; margin-bottom:10px; font-size:22px; }
+  p { color:#8b949e; font-size:14px; margin-bottom:30px; text-align:center; line-height:1.6; }
+  input { width:100%; max-width:400px; padding:14px; font-size:16px; background:#161b22; border:1px solid #30363d; border-radius:8px; color:#fff; margin-bottom:20px; }
+  button { width:100%; max-width:400px; padding:14px; font-size:16px; font-weight:bold; color:#fff; background:#238636; border:none; border-radius:8px; cursor:pointer; }
+  button:active { background:#2ea043; }
+  #status { margin-top:20px; font-size:14px; color:#3fb950; text-align:center; }
+  .box { background:#161b22; border:1px solid #30363d; border-radius:12px; padding:20px; width:100%; max-width:400px; margin-top:20px; }
+</style>
+</head>
+<body>
+  <h2>📺 电视数据源配置</h2>
+  <p>请在下方输入你的 JSON 数据源网址<br>电视收到后将永久自动从这里拉取价格</p>
+  
+  <input type="text" id="urlInput" placeholder="例如 https://xxx.com/data.json">
+  <button id="sendBtn">发送到电视并保存</button>
+  <div id="status">正在连接电视...</div>
+
+  <div class="box">
+    <div style="font-size:13px;color:#8b949e;margin-bottom:10px">💡 提示：填完发送后，本页面关掉也没关系。</div>
+  </div>
+
+<script>
+  var urlParams = new URLSearchParams(location.search);
+  var hostId = urlParams.get('host') || '';
+  var statusEl = document.getElementById('status');
+  var cc = webconnect(hostId);
+
+  function setStatus(msg, isErr) {
+    statusEl.textContent = msg;
+    statusEl.style.color = isErr ? '#f85149' : '#3fb950';
+  }
+
+  setTimeout(function() {
+    if (typeof cc.connectTo === 'function') cc.connectTo(hostId);
+  }, 300);
+
+  cc.onConnect(function() {
+    setStatus('✅ 已连接电视，请输入网址并发送');
+  });
+  cc.onDisconnect(function() {
+    setStatus('❌ 已与电视断开，请重新扫码', true);
+  });
+
+  document.getElementById('sendBtn').onclick = function() {
+    var url = document.getElementById('urlInput').value.trim();
+    if (!url) { alert('请输入数据源网址'); return; }
+    if (!url.startsWith('http')) { alert('网址必须以 http:// 或 https:// 开头'); return; }
+
+    setStatus('正在发送...');
+    var msg = JSON.stringify({ type: 'set-source', url: url });
+    
+    cc.getConnection(function(a) {
+      if (a && a.connection) {
+        cc.Send(msg, { connectId: a.connection });
+        setStatus('✅ 发送成功！电视正在拉取数据');
+      } else {
+        setStatus('❌ 发送失败，未连接', true);
+      }
+    });
+  };
+</script>
+</body>
+</html>
