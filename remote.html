@@ -53,6 +53,17 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
 .admin-toast{position:fixed;left:50%;bottom:120px;transform:translateX(-50%);z-index:99999;padding:14px 28px;font-size:15px;color:#3fb950;background:rgba(13,17,23,.98);border:2px solid rgba(46,160,67,.7);border-radius:12px;box-shadow:0 0 30px rgba(46,160,67,.4);opacity:0;transition:opacity .25s;pointer-events:none;white-space:nowrap;max-width:86vw;overflow:hidden;text-overflow:ellipsis}
 .admin-toast.show{opacity:1}
 .admin-toast.err{color:#f85149;border-color:rgba(248,81,73,.7);box-shadow:0 0 30px rgba(248,81,73,.4)}
+.admin-modal{position:fixed;inset:0;z-index:200;background:rgba(0,0,0,.75);display:none;align-items:center;justify-content:center;padding:20px;backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px)}
+.admin-modal.show{display:flex}
+.admin-modal-inner{background:var(--panel);border:1px solid var(--stroke);border-radius:16px;padding:26px 22px;max-width:380px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,.6)}
+.admin-modal-title{font-size:18px;font-weight:700;color:#e6edf3;margin-bottom:8px;text-align:center}
+.admin-modal-desc{font-size:14px;color:#8b949e;margin-bottom:18px;line-height:1.6;text-align:center}
+.admin-modal-input{width:100%;padding:14px;font-size:22px;text-align:center;letter-spacing:6px;color:#e6edf3;background:#0d1117;border:2px solid #30363d;border-radius:10px;outline:none;font-family:monospace;font-weight:700;margin-bottom:16px}
+.admin-modal-input:focus{border-color:var(--accent)}
+.admin-modal-btns{display:flex;gap:10px}
+.admin-modal-btns .admin-btn{flex:1}
+.admin-info{font-size:13px;color:#8b949e;text-align:center;margin-bottom:14px}
+.admin-info .code{font-size:18px;font-weight:700;color:#3fb950;letter-spacing:3px;font-family:monospace}
 @media (max-width: 480px){ .admin-row{grid-template-columns:1fr;} .admin-body{padding:16px 14px 130px;} .admin-card{padding:16px;} .admin-input,.admin-textarea{font-size:16px;} }
 </style>
 </head>
@@ -63,6 +74,7 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
     <div class="admin-status" id="adminStatus">初始化…</div>
   </div>
   <div class="admin-body">
+    <div class="admin-info" id="adminInfoBar"></div>
     <div class="admin-tabs" id="adminTabs">
       <button class="admin-tab active" data-tab="basic">基本</button>
       <button class="admin-tab" data-tab="prices">价格</button>
@@ -85,24 +97,114 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
 </div>
 <div id="adminToast" class="admin-toast"></div>
 
+<!-- 配对码输入弹窗 -->
+<div class="admin-modal" id="codeModal">
+  <div class="admin-modal-inner">
+    <div class="admin-modal-title">连接电视</div>
+    <div class="admin-modal-desc">请输入电视上显示的 6 位配对码<br>（首次使用请扫描电视「扫码管理」二维码）</div>
+    <input class="admin-modal-input" id="codeInput" type="tel" inputmode="numeric" maxlength="6" placeholder="------" autocomplete="off">
+    <div class="admin-modal-btns">
+      <button class="admin-btn" id="codeCancelBtn">取消</button>
+      <button class="admin-btn primary" id="codeOkBtn">连接</button>
+    </div>
+  </div>
+</div>
+
 <script>
 var MAX_CARDS = 6;
-var urlParams = new URLSearchParams(location.search);
-var TARGET_HOST_ID = urlParams.get('host') || localStorage.getItem('lufei_tv_host') || '';
 
-if (TARGET_HOST_ID) {
-    localStorage.setItem('lufei_tv_host', TARGET_HOST_ID);
-} else {
-    setTimeout(function() {
-        var manualHost = prompt('⚠️ 未获取到电视 ID\n请手动输入（或重新用浏览器扫码）：');
-        if (manualHost && manualHost.trim()) {
-            localStorage.setItem('lufei_tv_host', manualHost.trim());
-            location.reload();
-        }
-    }, 500);
+/* ========= 配对码与 ID 解析 ========= */
+var urlParams = new URLSearchParams(location.search);
+var urlHost = urlParams.get('host') || '';
+var urlCode = (urlParams.get('code') || '').replace(/\D/g, '');
+
+function readCodeMap(){
+  try { return JSON.parse(localStorage.getItem('lufei_code_map') || '{}'); } catch(e){ return {}; }
+}
+function writeCodeMap(map){
+  try { localStorage.setItem('lufei_code_map', JSON.stringify(map)); } catch(e){}
+}
+function saveCodeMapping(code, host){
+  if (!code || !host) return;
+  var map = readCodeMap();
+  map[code] = host;
+  writeCodeMap(map);
+}
+function hostFromCode(code){
+  var map = readCodeMap();
+  return map[code] || '';
 }
 
-/* 默认配置与电视端保持一致，避免未拉取成功时覆盖出问题 */
+/* 有 host 就存一份 */
+if (urlHost) {
+  try { localStorage.setItem('lufei_tv_host', urlHost); } catch(e){}
+  if (urlCode) saveCodeMapping(urlCode, urlHost);
+}
+
+var TARGET_HOST_ID = urlHost || localStorage.getItem('lufei_tv_host') || '';
+
+/* 顶栏提示 */
+function renderInfoBar(){
+  var bar = document.getElementById('adminInfoBar');
+  if (!bar) return;
+  var map = readCodeMap();
+  var codes = Object.keys(map);
+  if (TARGET_HOST_ID) {
+    var knownCode = codes.find(function(c){ return map[c] === TARGET_HOST_ID; }) || '';
+    bar.innerHTML = knownCode
+      ? '配对码 <span class="code">' + knownCode + '</span>'
+      : '已连接电视（未记录配对码）';
+  } else {
+    bar.textContent = '未连接电视，请输配对码或扫描电视二维码';
+  }
+}
+renderInfoBar();
+
+/* ========= 配对码输入弹窗 ========= */
+var codeModal = document.getElementById('codeModal');
+var codeInput = document.getElementById('codeInput');
+
+function openCodeModal(){
+  if (!codeModal) return;
+  codeModal.classList.add('show');
+  if (codeInput){ codeInput.value = ''; setTimeout(function(){ codeInput.focus(); }, 100); }
+}
+function closeCodeModal(){ if (codeModal) codeModal.classList.remove('show'); }
+
+function tryConnectByCode(code){
+  code = (code || '').replace(/\D/g, '');
+  if (code.length !== 6){ toast('请输入 6 位配对码', true); return; }
+  var host = hostFromCode(code);
+  if (!host){
+    toast('未找到该配对码，请先扫描电视二维码一次', true);
+    return;
+  }
+  localStorage.setItem('lufei_tv_host', host);
+  localStorage.setItem('lufei_last_code', code);
+  TARGET_HOST_ID = host;
+  closeCodeModal();
+  renderInfoBar();
+  setStatus('🔄 正在连接…', 'busy');
+  tryConnect();
+}
+
+if (codeInput) {
+  codeInput.addEventListener('input', function(){
+    this.value = this.value.replace(/\D/g, '').slice(0, 6);
+  });
+  codeInput.addEventListener('keydown', function(e){
+    if (e.key === 'Enter') tryConnectByCode(codeInput.value);
+  });
+}
+document.getElementById('codeOkBtn').onclick = function(){ tryConnectByCode(codeInput.value); };
+document.getElementById('codeCancelBtn').onclick = function(){ closeCodeModal(); };
+
+/* 没有 host：打开配对码输入弹窗 */
+if (!TARGET_HOST_ID) {
+  setTimeout(openCodeModal, 200);
+}
+
+/* ========= 默认配置 ========= */
 var DEFAULT_CONFIG = {
   brand: { name:'路飞电竞', sub:'LUFEI E-SPORTS', logo:'https://diskmirror.lingyuzhao.top/1193/Binary/logo.png' },
   service: { hours:'24H 全天候', wifiName:'路飞电竞', wifiPwd:'lufeidianjing', hotline:'166 0418 6135' },
@@ -281,6 +383,8 @@ if (cc && TARGET_HOST_ID){
         }
         if (m.type === 'admin-config' && m.data){
           currentCfg = normalizeConfig(m.data);
+          if (m.code && TARGET_HOST_ID) saveCodeMapping(String(m.code), TARGET_HOST_ID);
+          renderInfoBar();
           renderAdminAll();
           saveDraft();
           toast('✅ 已拉取配置');
@@ -341,7 +445,6 @@ function renderPrices(){
     if (isFull) html += '<div class="admin-progress full">已达上限，不能再新增</div>';
     else if (count === 0) html += '<div class="admin-progress">还没有卡片</div>';
     else html += '<div class="admin-progress">还能再加 ' + (MAX_CARDS - count) + ' 张</div>';
-    if (count > MAX_CARDS) html += '<div class="admin-warn danger">⚠️ 只显示前 ' + MAX_CARDS + ' 张，请删多余</div>';
     html += '<div class="admin-row"><div class="admin-field"><label class="admin-label">标题</label><input class="admin-input" data-bind="prices.'+key+'.title" value="'+esc(section.title)+'"></div><div class="admin-field"><label class="admin-label">时段/单位</label><input class="admin-input" data-bind="prices.'+key+'.unit" value="'+esc(section.unit)+'"></div></div>';
     section.cards.forEach(function(card, i){
       html += '<div style="margin-top:14px;padding-top:14px;border-top:1px dashed #30363d"><div class="admin-item-head"><span class="admin-item-idx">卡片 '+(i+1)+'</span><button class="admin-btn small danger" data-price-del="'+key+'-'+i+'">删除</button></div>' +
@@ -542,6 +645,11 @@ document.getElementById('adminApp').addEventListener('input', function(){
 
 document.addEventListener('visibilitychange', function(){
   if (!document.hidden && connected) doSend({ type:'ping', t: Date.now() });
+});
+
+/* 点击"拉取"按钮时，如果还没 host 再弹配对码 */
+document.getElementById('adminReloadBtn').addEventListener('click', function(){
+  if (!TARGET_HOST_ID) openCodeModal();
 });
 </script>
 </body>
