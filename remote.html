@@ -3,70 +3,546 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
-<title>路飞电竞 · 填源遥控器</title>
+<title>路飞电竞 · 手机管理</title>
 <script src="https://cdn.jsdelivr.net/npm/webconnect/dist/umd/webconnect.js"></script>
 <style>
-  body { background:#0d1117; color:#c9d1d9; font-family:sans-serif; padding:30px 20px; display:flex; flex-direction:column; align-items:center; }
-  h2 { color:#58a6ff; margin-bottom:10px; font-size:22px; }
-  p { color:#8b949e; font-size:14px; margin-bottom:30px; text-align:center; line-height:1.6; }
-  input { width:100%; max-width:400px; padding:14px; font-size:16px; background:#161b22; border:1px solid #30363d; border-radius:8px; color:#fff; margin-bottom:20px; }
-  button { width:100%; max-width:400px; padding:14px; font-size:16px; font-weight:bold; color:#fff; background:#238636; border:none; border-radius:8px; cursor:pointer; }
-  button:active { background:#2ea043; }
-  #status { margin-top:20px; font-size:14px; color:#3fb950; text-align:center; }
-  .box { background:#161b22; border:1px solid #30363d; border-radius:12px; padding:20px; width:100%; max-width:400px; margin-top:20px; }
+:root{--bg:#0d1117;--panel:#161b22;--stroke:#21262d;--text:#c9d1d9;--accent:#58a6ff;--green:#238636;--red:#da3633;--radius:12px}
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"PingFang SC",sans-serif;-webkit-overflow-scrolling:touch;padding-bottom:90px}
+.admin-top{position:sticky;top:0;z-index:10;background:var(--panel);border-bottom:1px solid var(--stroke);padding:14px 18px;display:flex;align-items:center;justify-content:space-between;gap:10px;box-shadow:0 2px 12px rgba(0,0,0,.4)}
+.admin-top-title{font-size:17px;font-weight:700;color:var(--accent);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.admin-status{font-size:12px;color:#8b949e;padding:6px 10px;border-radius:8px;background:rgba(255,255,255,.04);flex-shrink:0;max-width:60%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.admin-status.ok{color:#3fb950;background:rgba(63,185,80,.14)}
+.admin-status.err{color:#f85149;background:rgba(248,81,73,.14)}
+.admin-status.busy{color:var(--accent);background:rgba(88,166,255,.14);animation:pulse 1s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.5}}
+.admin-body{padding:20px 20px 130px}
+.admin-tabs{display:flex;gap:8px;overflow-x:auto;padding:0 0 16px;-webkit-overflow-scrolling:touch}
+.admin-tabs::-webkit-scrollbar{display:none}
+.admin-tab{flex-shrink:0;padding:10px 18px;font-size:14px;border:none;background:var(--stroke);color:#8b949e;border-radius:10px;cursor:pointer;white-space:nowrap}
+.admin-tab.active{background:var(--green);color:#fff}
+.admin-pane{display:none}
+.admin-pane.active{display:block}
+.admin-card{background:var(--panel);border:1px solid var(--stroke);border-radius:var(--radius);padding:18px 20px;margin-bottom:16px}
+.admin-card-title{font-size:16px;font-weight:700;color:#e6edf3;margin-bottom:14px;padding-left:12px;border-left:4px solid var(--accent);display:flex;align-items:center;justify-content:space-between;gap:10px}
+.count-badge{font-size:12px;font-weight:600;color:var(--accent);background:rgba(88,166,255,.12);padding:3px 9px;border-radius:6px}
+.count-badge.full{color:#f85149;background:rgba(248,81,73,.14)}
+.admin-field{display:flex;flex-direction:column;gap:6px;margin-bottom:14px;min-width:0}
+.admin-label{font-size:13px;color:#8b949e}
+.admin-input,.admin-textarea{width:100%;padding:11px 14px;font-size:15px;color:#e6edf3;background:#0d1117;border:1px solid #30363d;border-radius:8px;outline:none;font-family:inherit}
+.admin-input:focus,.admin-textarea:focus{border-color:var(--accent)}
+.admin-textarea{min-height:80px;resize:vertical;line-height:1.5}
+.admin-row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.admin-accent{width:100%;height:42px;border:1px solid #30363d;border-radius:8px;background:#0d1117;cursor:pointer}
+.admin-btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:11px 20px;font-size:15px;font-weight:600;color:var(--text);background:var(--stroke);border:1px solid #30363d;border-radius:9px;cursor:pointer;font-family:inherit;white-space:nowrap}
+.admin-btn:active{transform:scale(.97)}
+.admin-btn.primary{background:var(--green);border-color:#2ea043;color:#fff}
+.admin-btn.danger{background:var(--red);border-color:#f85149;color:#fff}
+.admin-btn.small{padding:8px 14px;font-size:13px}
+.admin-btn.full{width:100%}
+.admin-btn:disabled{opacity:.45;cursor:not-allowed}
+.admin-bar{position:fixed;left:0;right:0;bottom:0;z-index:11;padding:14px 20px calc(14px + env(safe-area-inset-bottom));background:var(--panel);border-top:1px solid var(--stroke);display:flex;gap:10px;box-shadow:0 -2px 12px rgba(0,0,0,.4)}
+.admin-bar .admin-btn{flex:1}
+.admin-item-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;gap:8px}
+.admin-item-idx{font-size:12px;color:#8b949e;background:var(--stroke);padding:3px 9px;border-radius:5px}
+.admin-bg-preview{width:100%;height:160px;border-radius:8px;background:#000 center/cover no-repeat;border:1px solid #30363d;display:flex;align-items:center;justify-content:center;color:#484f58;font-size:14px}
+.admin-warn{font-size:13px;color:#8b949e;line-height:1.7;padding:12px;background:rgba(88,166,255,.06);border-radius:8px;border-left:3px solid var(--accent);margin-bottom:14px;word-break:break-all}
+.admin-warn.danger{color:#f85149;background:rgba(248,81,73,.08);border-left-color:#f85149}
+.admin-progress{font-size:12px;color:var(--accent);padding:6px 10px;background:rgba(88,166,255,.06);border-radius:6px;margin-bottom:12px;text-align:center}
+.admin-progress.full{color:#f85149;background:rgba(248,81,73,.08)}
+.admin-toast{position:fixed;left:50%;bottom:120px;transform:translateX(-50%);z-index:99999;padding:14px 28px;font-size:15px;color:#3fb950;background:rgba(13,17,23,.98);border:2px solid rgba(46,160,67,.7);border-radius:12px;box-shadow:0 0 30px rgba(46,160,67,.4);opacity:0;transition:opacity .25s;pointer-events:none;white-space:nowrap;max-width:86vw;overflow:hidden;text-overflow:ellipsis}
+.admin-toast.show{opacity:1}
+.admin-toast.err{color:#f85149;border-color:rgba(248,81,73,.7);box-shadow:0 0 30px rgba(248,81,73,.4)}
+@media (max-width: 480px){ .admin-row{grid-template-columns:1fr;} .admin-body{padding:16px 14px 130px;} .admin-card{padding:16px;} .admin-input,.admin-textarea{font-size:16px;} }
 </style>
 </head>
 <body>
-  <h2>📺 电视数据源配置</h2>
-  <p>请在下方输入你的 JSON 数据源网址<br>电视收到后将永久自动从这里拉取价格</p>
-  
-  <input type="text" id="urlInput" placeholder="例如 https://xxx.com/data.json">
-  <button id="sendBtn">发送到电视并保存</button>
-  <div id="status">正在连接电视...</div>
-
-  <div class="box">
-    <div style="font-size:13px;color:#8b949e;margin-bottom:10px">💡 提示：填完发送后，本页面关掉也没关系。</div>
+<div id="adminApp">
+  <div class="admin-top">
+    <div class="admin-top-title">⚙️ 手机管理</div>
+    <div class="admin-status" id="adminStatus">初始化…</div>
   </div>
+  <div class="admin-body">
+    <div class="admin-tabs" id="adminTabs">
+      <button class="admin-tab active" data-tab="basic">基本</button>
+      <button class="admin-tab" data-tab="prices">价格</button>
+      <button class="admin-tab" data-tab="vip">会员</button>
+      <button class="admin-tab" data-tab="announce">公告</button>
+      <button class="admin-tab" data-tab="bg">背景</button>
+      <button class="admin-tab" data-tab="footer">页脚</button>
+    </div>
+    <div class="admin-pane active" id="pane-basic"></div>
+    <div class="admin-pane" id="pane-prices"></div>
+    <div class="admin-pane" id="pane-vip"></div>
+    <div class="admin-pane" id="pane-announce"></div>
+    <div class="admin-pane" id="pane-bg"></div>
+    <div class="admin-pane" id="pane-footer"></div>
+  </div>
+  <div class="admin-bar">
+    <button class="admin-btn" id="adminReloadBtn">🔄 拉取</button>
+    <button class="admin-btn primary" id="adminSendBtn">💾 保存到电视</button>
+  </div>
+</div>
+<div id="adminToast" class="admin-toast"></div>
 
 <script>
-  var urlParams = new URLSearchParams(location.search);
-  var hostId = urlParams.get('host') || '';
-  var statusEl = document.getElementById('status');
-  var cc = webconnect(hostId);
+var MAX_CARDS = 6;
+var urlParams = new URLSearchParams(location.search);
+var TARGET_HOST_ID = urlParams.get('host') || localStorage.getItem('lufei_tv_host') || '';
 
-  function setStatus(msg, isErr) {
-    statusEl.textContent = msg;
-    statusEl.style.color = isErr ? '#f85149' : '#3fb950';
+if (TARGET_HOST_ID) {
+    localStorage.setItem('lufei_tv_host', TARGET_HOST_ID);
+} else {
+    setTimeout(function() {
+        var manualHost = prompt('⚠️ 未获取到电视 ID\n请手动输入（或重新用浏览器扫码）：');
+        if (manualHost && manualHost.trim()) {
+            localStorage.setItem('lufei_tv_host', manualHost.trim());
+            location.reload();
+        }
+    }, 500);
+}
+
+/* 默认配置与电视端保持一致，避免未拉取成功时覆盖出问题 */
+var DEFAULT_CONFIG = {
+  brand: { name:'路飞电竞', sub:'LUFEI E-SPORTS', logo:'https://diskmirror.lingyuzhao.top/1193/Binary/logo.png' },
+  service: { hours:'24H 全天候', wifiName:'路飞电竞', wifiPwd:'lufeidianjing', hotline:'166 0418 6135' },
+  vip: [
+    { pay:'39.9', bonus:'到手100元' },
+    { pay:'100', bonus:'到手300元' },
+    { pay:'200', bonus:'到手600元' },
+    { pay:'500', bonus:'到手1600元' }
+  ],
+  announcements: [{ cls:'pink', text:'<span class="hl-pink">【消防公告】</span>公共场所火灾处置流程' }],
+  prices: {
+    timer: { title:'计时价格', unit:'元 / 小时', cards:[
+      { name:'大厅', price:'11', config:'9700X + RTX 5070', accent:'#00ff9d' },
+      { name:'包间', price:'16.8', config:'7800X3D + RTX 5070', accent:'#00b3ff' },
+      { name:'精品包', price:'17.8', config:'9800X3D + RTX 5070 <br>外设自选', accent:'#ff00e5' },
+      { name:'豪华包', price:'21.8', config:'9800X3D + RTX 5080 <br>外设自选', accent:'#ff6d00' },
+      { name:'至尊包', price:'26.8', config:'9800X3D + RTX 5080 <br>旗舰外设', accent:'#ffe600' },
+      { name:'超豪华包', price:'32.8', config:'9800X3D + RTX 5080 <br>旗舰外设', accent:'#aa66ff' }
+    ]},
+    night: { title:'包宿', unit:'21:55 — 07:00', cards:[
+      { name:'大厅', price:'30', config:'9700X + 5070', accent:'#ff00e5' },
+      { name:'包间', price:'40', config:'7800X3D + 5070', accent:'#00b3ff' },
+      { name:'精品包', price:'50', config:'9800X3D + 5070', accent:'#ff00e5' },
+      { name:'豪华包', price:'60', config:'9800X3D + 5080', accent:'#ff6d00' },
+      { name:'至尊包', price:'70', config:'9800X3D + 5080', accent:'#ffe600' },
+      { name:'超豪华包', price:'80', config:'9800X3D + RTX 5080', accent:'#aa66ff' }
+    ]},
+    morning: { title:'包早', unit:'07:00 — 13:00', cards:[
+      { name:'大厅', price:'12.9', config:'9700X + 5070', accent:'#00ff9d' },
+      { name:'包间', price:'17.8', config:'7800X3D + 5070', accent:'#00b3ff' },
+      { name:'精品双人包', price:'29.9', config:'9800X3D + 5070', accent:'#ff00e5' },
+      { name:'精品单人包', price:'39.9', config:'9800X3D + 5080', accent:'#ff00e5' },
+      { name:'豪华包', price:'49.9', config:'9800X3D + 5080', accent:'#ff6d00' }
+    ]}
+  },
+  bg: { default:'bjsp/常规时段.jpg', morning:'bjsp/包早时段.jpg', night:'bjsp/包宿时段.jpg' },
+  footer: {
+    rules: ['未成年人禁止入内','请携带有效身份证件登记','大厅禁止吸烟','妥善保管个人物品'],
+    slogan: '路飞电竞 · 畅享游戏世界',
+    phone: '166 0418 6135'
   }
+};
 
-  setTimeout(function() {
-    if (typeof cc.connectTo === 'function') cc.connectTo(hostId);
-  }, 300);
+function deepClone(o){ return JSON.parse(JSON.stringify(o)); }
+function esc(s){ return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function toHex(c){ if (typeof c !== 'string') return '#00ff9d'; if (/^#[0-9a-f]{6}$/i.test(c)) return c; if (/^#[0-9a-f]{3}$/i.test(c)) return '#'+c[1]+c[1]+c[2]+c[2]+c[3]+c[3]; return '#00ff9d'; }
 
-  cc.onConnect(function() {
-    setStatus('✅ 已连接电视，请输入网址并发送');
-  });
-  cc.onDisconnect(function() {
-    setStatus('❌ 已与电视断开，请重新扫码', true);
-  });
-
-  document.getElementById('sendBtn').onclick = function() {
-    var url = document.getElementById('urlInput').value.trim();
-    if (!url) { alert('请输入数据源网址'); return; }
-    if (!url.startsWith('http')) { alert('网址必须以 http:// 或 https:// 开头'); return; }
-
-    setStatus('正在发送...');
-    var msg = JSON.stringify({ type: 'set-source', url: url });
-    
-    cc.getConnection(function(a) {
-      if (a && a.connection) {
-        cc.Send(msg, { connectId: a.connection });
-        setStatus('✅ 发送成功！电视正在拉取数据');
-      } else {
-        setStatus('❌ 发送失败，未连接', true);
+function normalizeConfig(saved){
+  var out = deepClone(DEFAULT_CONFIG);
+  if (!saved || typeof saved !== 'object') return out;
+  if (saved.brand && typeof saved.brand === 'object'){ ['name','sub','logo'].forEach(function(k){ if (typeof saved.brand[k]==='string') out.brand[k]=saved.brand[k]; }); }
+  if (saved.service && typeof saved.service === 'object'){ ['hours','wifiName','wifiPwd','hotline'].forEach(function(k){ if (typeof saved.service[k]==='string') out.service[k]=saved.service[k]; }); }
+  if (Array.isArray(saved.vip) && saved.vip.length){ out.vip = saved.vip.map(function(v){ v=v||{}; return { pay:v.pay!=null?String(v.pay):'', bonus:v.bonus!=null?String(v.bonus):'' }; }); }
+  if (Array.isArray(saved.announcements) && saved.announcements.length){ out.announcements = saved.announcements.map(function(a){ a=a||{}; return { cls:typeof a.cls==='string'?a.cls:'', text:a.text!=null?String(a.text):'' }; }); }
+  if (saved.prices && typeof saved.prices === 'object'){
+    ['timer','night','morning'].forEach(function(k){
+      var s=saved.prices[k]; if(!s||typeof s!=='object') return;
+      if(typeof s.title==='string') out.prices[k].title=s.title;
+      if(typeof s.unit==='string') out.prices[k].unit=s.unit;
+      if(Array.isArray(s.cards)){
+        out.prices[k].cards = s.cards.map(function(c,i){
+          var d = DEFAULT_CONFIG.prices[k].cards[i] || { name:'', price:'', config:'', accent:'#00ff9d' };
+          c = c || {};
+          return {
+            name: c.name!=null?String(c.name):d.name,
+            price: c.price!=null?String(c.price):d.price,
+            config: c.config!=null?String(c.config):d.config,
+            accent: (typeof c.accent==='string'&&c.accent)?c.accent:d.accent
+          };
+        });
       }
     });
+  }
+  if (saved.bg && typeof saved.bg === 'object'){ ['default','morning','night'].forEach(function(k){ if (typeof saved.bg[k] === 'string') out.bg[k] = saved.bg[k]; }); }
+  if (saved.footer && typeof saved.footer === 'object'){
+    if (Array.isArray(saved.footer.rules) && saved.footer.rules.length){ out.footer.rules = saved.footer.rules.map(function(r){ return r!=null?String(r):''; }); }
+    if (typeof saved.footer.slogan === 'string') out.footer.slogan = saved.footer.slogan;
+    if (typeof saved.footer.phone === 'string') out.footer.phone = saved.footer.phone;
+  }
+  return out;
+}
+
+var toastEl = document.getElementById('adminToast');
+var toastTimer = null;
+function toast(msg, isErr){
+  toastEl.textContent = msg;
+  toastEl.className = 'admin-toast show' + (isErr ? ' err' : '');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(function(){ toastEl.classList.remove('show'); }, 2600);
+}
+var statusEl = document.getElementById('adminStatus');
+function setStatus(txt, cls){ statusEl.textContent = txt; statusEl.className = 'admin-status' + (cls ? ' ' + cls : ''); }
+
+var currentCfg = null;
+try { var draftRaw = localStorage.getItem('lufei_admin_draft'); if (draftRaw) currentCfg = normalizeConfig(JSON.parse(draftRaw)); } catch(e){}
+if (!currentCfg) currentCfg = deepClone(DEFAULT_CONFIG);
+
+var cc = null;
+try { cc = (typeof webconnect === 'function') ? webconnect() : null; } catch(e){ cc = null; }
+var connected = false, myId = '', lastPongTs = 0, heartbeatTimer = null, checkTimer = null, reconnectTimer = null, pendingApply = null;
+
+function tryConnect(){
+  if (!cc || !TARGET_HOST_ID) return;
+  try {
+    if (typeof cc.connectTo === 'function') cc.connectTo(TARGET_HOST_ID);
+    else if (typeof cc.connect === 'function') cc.connect(TARGET_HOST_ID);
+    else if (typeof cc.join === 'function') cc.join(TARGET_HOST_ID);
+  } catch(e){}
+}
+function doSend(obj, cb){
+  if (!cc){ if (cb) cb(false, 'no-cc'); return; }
+  try {
+    cc.getConnection(function(a){
+      if (!a || !a.connection){ if (cb) cb(false, 'no-conn'); return; }
+      try { cc.Send(JSON.stringify(obj), { connectId: a.connection }); if (cb) cb(true); }
+      catch(e){ if (cb) cb(false, String(e && e.message || e)); }
+    });
+  } catch(e){ if (cb) cb(false, String(e && e.message || e)); }
+}
+function sendWithRetry(obj, maxTries, cb){
+  var tries = 0;
+  function attempt(){
+    tries++;
+    doSend(obj, function(ok, err){
+      if (ok){ if (cb) cb(true); return; }
+      if (tries >= maxTries){ if (cb) cb(false, err); return; }
+      setTimeout(attempt, 400 + tries * 300);
+    });
+  }
+  attempt();
+}
+function startHeartbeat(){
+  stopHeartbeat(); lastPongTs = Date.now();
+  heartbeatTimer = setInterval(function(){ if (!connected) return; doSend({ type:'ping', t: Date.now() }); }, 10000);
+  checkTimer = setInterval(function(){
+    if (!connected) return;
+    if (Date.now() - lastPongTs > 32000){
+      connected = false; setStatus('⚠️ 重连中…', 'busy'); tryConnect();
+      setTimeout(function(){ if (!connected) setStatus('❌ 重连失败', 'err'); }, 8000);
+    }
+  }, 5000);
+}
+function stopHeartbeat(){
+  if (heartbeatTimer){ clearInterval(heartbeatTimer); heartbeatTimer = null; }
+  if (checkTimer){ clearInterval(checkTimer); checkTimer = null; }
+}
+
+if (cc && TARGET_HOST_ID){
+  try { cc.getMyId(function(a){ myId = (a && a.connectId) || ''; }); } catch(e){}
+  try {
+    cc.onConnect(function(a){
+      connected = true; lastPongTs = Date.now();
+      setStatus('✅ 已连接电视', 'ok'); toast('✅ 已连接电视');
+      startHeartbeat();
+      setTimeout(function(){ requestConfig(true); }, 400);
+    });
+  } catch(e){}
+  try {
+    cc.onDisconnect(function(){
+      connected = false; stopHeartbeat();
+      setStatus('⚠️ 断开重连…', 'busy');
+      if (reconnectTimer) clearTimeout(reconnectTimer);
+      reconnectTimer = setTimeout(tryConnect, 2500);
+    });
+  } catch(e){}
+  try {
+    cc.onReceive(function(data){
+      try {
+        var m = null;
+        try { m = JSON.parse(data); } catch(e){ return; }
+        if (!m || typeof m !== 'object') return;
+        if (m.type === 'pong'){
+          lastPongTs = Date.now();
+          if (!connected){ connected = true; setStatus('✅ 已连接电视', 'ok'); startHeartbeat(); }
+          return;
+        }
+        if (m.type === 'admin-config' && m.data){
+          currentCfg = normalizeConfig(m.data);
+          renderAdminAll();
+          saveDraft();
+          toast('✅ 已拉取配置');
+          return;
+        }
+        if (m.type === 'admin-applied'){
+          if (m.ok === false){ pendingApply = null; toast('❌ 保存失败', true); }
+          else { pendingApply = null; toast('✅ 已应用'); }
+          return;
+        }
+        if (m.type === 'admin-busy'){ toast('电视忙，稍后重试', true); return; }
+      } catch(e){}
+    });
+  } catch(e){}
+  setTimeout(tryConnect, 300);
+} else {
+  setStatus('⚠️ 缺少 host，无法连接', 'err');
+}
+setTimeout(function(){ if (!connected && TARGET_HOST_ID) setStatus('⚠️ 未连上，检查 WiFi', 'err'); }, 10000);
+
+function requestConfig(silent){
+  if (!connected){ if (!silent) toast('未连接电视', true); return; }
+  setStatus('📥 拉取中…', 'busy');
+  sendWithRetry({ type:'admin-request' }, 3, function(ok, err){
+    if (ok){ if (!silent) toast('正在拉取…'); }
+    else { setStatus('⚠️ 拉取失败', 'err'); if (!silent) toast('拉取失败: ' + (err || ''), true); }
+  });
+}
+function saveDraft(){ try { localStorage.setItem('lufei_admin_draft', JSON.stringify(currentCfg)); } catch(e){} }
+
+function renderAdminAll(){
+  try { renderBasic(); } catch(e){}
+  try { renderPrices(); } catch(e){}
+  try { renderVIP(); } catch(e){}
+  try { renderAnnounce(); } catch(e){}
+  try { renderBg(); } catch(e){}
+  try { renderFooter(); } catch(e){}
+}
+function renderBasic(){
+  var c = currentCfg;
+  document.getElementById('pane-basic').innerHTML =
+    '<div class="admin-card"><div class="admin-card-title">品牌</div>' +
+      '<div class="admin-field"><label class="admin-label">品牌名称</label><input class="admin-input" data-bind="brand.name" value="'+esc(c.brand.name)+'"></div>' +
+      '<div class="admin-field"><label class="admin-label">英文副标题</label><input class="admin-input" data-bind="brand.sub" value="'+esc(c.brand.sub)+'"></div>' +
+      '<div class="admin-field"><label class="admin-label">Logo URL</label><input class="admin-input" data-bind="brand.logo" value="'+esc(c.brand.logo)+'"></div></div>' +
+    '<div class="admin-card"><div class="admin-card-title">服务信息</div>' +
+      '<div class="admin-field"><label class="admin-label">营业时间</label><input class="admin-input" data-bind="service.hours" value="'+esc(c.service.hours)+'"></div>' +
+      '<div class="admin-field"><label class="admin-label">WiFi 名称</label><input class="admin-input" data-bind="service.wifiName" value="'+esc(c.service.wifiName)+'"></div>' +
+      '<div class="admin-field"><label class="admin-label">WiFi 密码</label><input class="admin-input" data-bind="service.wifiPwd" value="'+esc(c.service.wifiPwd)+'"></div>' +
+      '<div class="admin-field"><label class="admin-label">服务热线</label><input class="admin-input" data-bind="service.hotline" value="'+esc(c.service.hotline)+'"></div></div>';
+}
+
+function renderPrices(){
+  var c = currentCfg, html = '';
+  ['timer','night','morning'].forEach(function(key){
+    var section = c.prices[key], label = key==='timer' ? '计时' : key==='night' ? '包宿' : '包早', count = section.cards.length, isFull = count >= MAX_CARDS;
+    html += '<div class="admin-card"><div class="admin-card-title">' + label + '<span class="count-badge' + (isFull ? ' full' : '') + '">' + count + ' / ' + MAX_CARDS + ' 张</span></div>';
+    if (isFull) html += '<div class="admin-progress full">已达上限，不能再新增</div>';
+    else if (count === 0) html += '<div class="admin-progress">还没有卡片</div>';
+    else html += '<div class="admin-progress">还能再加 ' + (MAX_CARDS - count) + ' 张</div>';
+    if (count > MAX_CARDS) html += '<div class="admin-warn danger">⚠️ 只显示前 ' + MAX_CARDS + ' 张，请删多余</div>';
+    html += '<div class="admin-row"><div class="admin-field"><label class="admin-label">标题</label><input class="admin-input" data-bind="prices.'+key+'.title" value="'+esc(section.title)+'"></div><div class="admin-field"><label class="admin-label">时段/单位</label><input class="admin-input" data-bind="prices.'+key+'.unit" value="'+esc(section.unit)+'"></div></div>';
+    section.cards.forEach(function(card, i){
+      html += '<div style="margin-top:14px;padding-top:14px;border-top:1px dashed #30363d"><div class="admin-item-head"><span class="admin-item-idx">卡片 '+(i+1)+'</span><button class="admin-btn small danger" data-price-del="'+key+'-'+i+'">删除</button></div>' +
+        '<div class="admin-field"><label class="admin-label">名称</label><input class="admin-input" data-bind="prices.'+key+'.cards.'+i+'.name" value="'+esc(card.name)+'"></div>' +
+        '<div class="admin-row" style="margin-bottom:10px"><div class="admin-field"><label class="admin-label">价格</label><input class="admin-input" data-bind="prices.'+key+'.cards.'+i+'.price" value="'+esc(card.price)+'"></div><div class="admin-field"><label class="admin-label">主题色</label><input class="admin-accent" type="color" data-bind="prices.'+key+'.cards.'+i+'.accent" value="'+toHex(card.accent)+'"></div></div>' +
+        '<div class="admin-field"><label class="admin-label">说明</label><input class="admin-input" data-bind="prices.'+key+'.cards.'+i+'.config" value="'+esc(card.config)+'"></div></div>';
+    });
+    html += '<div style="margin-top:16px">' + (isFull ? '<button class="admin-btn small full" disabled>已达上限</button>' : '<button class="admin-btn small full" data-price-add="'+key+'">+ 新增卡片</button>') + '</div></div>';
+  });
+  document.getElementById('pane-prices').innerHTML = html;
+  document.querySelectorAll('[data-price-add]').forEach(function(btn){
+    btn.onclick = function(){
+      syncFromForm();
+      var key = btn.getAttribute('data-price-add');
+      var list = currentCfg.prices[key].cards;
+      if (list.length >= MAX_CARDS) return toast('已达上限', true);
+      var last = list[list.length - 1] || { accent:'#00ff9d' };
+      list.push({ name:'新房间', price:'0', config:'', accent: last.accent || '#00ff9d' });
+      saveDraft(); renderPrices(); toast('已新增');
+    };
+  });
+  document.querySelectorAll('[data-price-del]').forEach(function(btn){
+    btn.onclick = function(){
+      if (!confirm('确定删除？')) return;
+      var val = btn.getAttribute('data-price-del'), idx = val.lastIndexOf('-'), key = val.substring(0, idx), i = parseInt(val.substring(idx + 1), 10);
+      syncFromForm(); currentCfg.prices[key].cards.splice(i, 1); saveDraft(); renderPrices(); toast('已删除');
+    };
+  });
+}
+
+function renderVIP(){
+  var c = currentCfg, html = '<div class="admin-card"><div class="admin-card-title">会员充值<span class="count-badge">'+c.vip.length+' 条</span></div>';
+  c.vip.forEach(function(v, i){
+    html += '<div style="margin-bottom:14px;padding-bottom:14px;border-bottom:1px dashed #30363d"><div class="admin-item-head"><span class="admin-item-idx">#'+(i+1)+'</span><button class="admin-btn small danger" data-vip-del="'+i+'">删除</button></div><div class="admin-row"><div class="admin-field"><label class="admin-label">充值金额</label><input class="admin-input" data-bind="vip.'+i+'.pay" value="'+esc(v.pay)+'"></div><div class="admin-field"><label class="admin-label">优惠说明</label><input class="admin-input" data-bind="vip.'+i+'.bonus" value="'+esc(v.bonus)+'"></div></div></div>';
+  });
+  html += '<button class="admin-btn small full" id="vipAddBtn">+ 新增</button></div>';
+  document.getElementById('pane-vip').innerHTML = html;
+  document.getElementById('vipAddBtn').onclick = function(){ syncFromForm(); currentCfg.vip.push({ pay:'0', bonus:'' }); saveDraft(); renderVIP(); };
+  document.querySelectorAll('[data-vip-del]').forEach(function(btn){
+    btn.onclick = function(){ syncFromForm(); currentCfg.vip.splice(parseInt(btn.getAttribute('data-vip-del'), 10), 1); saveDraft(); renderVIP(); };
+  });
+}
+
+function renderAnnounce(){
+  var c = currentCfg, html = '<div class="admin-card"><div class="admin-card-title">公告栏<span class="count-badge">'+c.announcements.length+' 条</span></div>';
+  c.announcements.forEach(function(a, i){
+    html += '<div style="margin-bottom:14px;padding-bottom:14px;border-bottom:1px dashed #30363d"><div class="admin-item-head"><span class="admin-item-idx">#'+(i+1)+'</span><button class="admin-btn small danger" data-ann-del="'+i+'">删除</button></div><div class="admin-field"><label class="admin-label">颜色</label><select class="admin-input" data-bind="announcements.'+i+'.cls">'+['','pink','yellow','blue','orange'].map(function(o){ return '<option value="'+o+'"'+(a.cls===o?' selected':'')+'>'+(o||'默认')+'</option>'; }).join('')+'</select></div><div class="admin-field"><label class="admin-label">内容(支持HTML)</label><textarea class="admin-textarea" data-bind="announcements.'+i+'.text">'+esc(a.text)+'</textarea></div></div>';
+  });
+  html += '<button class="admin-btn small full" id="annAddBtn">+ 新增</button></div>';
+  document.getElementById('pane-announce').innerHTML = html;
+  document.getElementById('annAddBtn').onclick = function(){ syncFromForm(); currentCfg.announcements.push({ cls:'', text:'' }); saveDraft(); renderAnnounce(); };
+  document.querySelectorAll('[data-ann-del]').forEach(function(btn){
+    btn.onclick = function(){ syncFromForm(); currentCfg.announcements.splice(parseInt(btn.getAttribute('data-ann-del'), 10), 1); saveDraft(); renderAnnounce(); };
+  });
+}
+
+function renderBg(){
+  var c = currentCfg, labels = { default:'常规', morning:'包早', night:'包宿' }, html = '<div class="admin-card"><div class="admin-card-title">背景图片</div>';
+  ['default','morning','night'].forEach(function(key){
+    html += '<div style="margin-bottom:16px;padding-bottom:16px;border-bottom:1px dashed #30363d" data-bgcard="'+key+'"><div class="admin-label" style="margin-bottom:8px">'+labels[key]+'</div><div class="admin-bg-preview" data-bgpreview="'+key+'"></div><div class="admin-field" style="margin-top:10px"><label class="admin-label">图片地址</label><input class="admin-input" data-bind="bg.'+key+'" value="'+esc(c.bg[key])+'"></div><div style="display:flex;gap:8px"><label class="admin-btn small">📁 上传<input type="file" accept="image/*" data-bgfile="'+key+'" style="display:none"></label><button class="admin-btn small" data-bgrefresh="'+key+'">👁 预览</button></div></div>';
+  });
+  html += '</div>';
+  document.getElementById('pane-bg').innerHTML = html;
+  ['default','morning','night'].forEach(refreshBgPreview);
+  document.querySelectorAll('[data-bgfile]').forEach(function(inp){
+    inp.onchange = function(){
+      var key = inp.getAttribute('data-bgfile'), f = inp.files && inp.files[0];
+      inp.value = '';
+      if (!f) return;
+      toast('压缩中…');
+      compressImg(f, 1600, 0.8, function(dataUrl){
+        if (!dataUrl){ toast('处理失败', true); return; }
+        var input = document.querySelector('[data-bind="bg.' + key + '"]');
+        if (input) input.value = dataUrl;
+        refreshBgPreview(key);
+        toast('✅ 已载入');
+      });
+    };
+  });
+  document.querySelectorAll('[data-bgrefresh]').forEach(function(btn){
+    btn.onclick = function(){ refreshBgPreview(btn.getAttribute('data-bgrefresh')); };
+  });
+  document.querySelectorAll('[data-bind^="bg."]').forEach(function(inp){
+    inp.addEventListener('input', function(){
+      var parts = inp.getAttribute('data-bind').split('.');
+      refreshBgPreview(parts[1]);
+    });
+  });
+}
+function refreshBgPreview(key){
+  var card = document.querySelector('[data-bgcard="'+key+'"]');
+  if (!card) return;
+  var preview = card.querySelector('[data-bgpreview]'), input = card.querySelector('[data-bind="bg.'+key+'"]');
+  if (!preview || !input) return;
+  var v = input.value.trim();
+  if (v){ preview.style.backgroundImage = 'url("' + v.replace(/["\\]/g, '') + '")'; preview.textContent = ''; }
+  else { preview.style.backgroundImage = ''; preview.textContent = '无图片'; }
+}
+
+function renderFooter(){
+  var c = currentCfg;
+  document.getElementById('pane-footer').innerHTML = '<div class="admin-card"><div class="admin-card-title">页脚</div><div class="admin-field"><label class="admin-label">规则(一行一条)</label><textarea class="admin-textarea" data-bind="footer.rules" style="min-height:110px">'+esc(c.footer.rules.join('\n'))+'</textarea></div><div class="admin-field"><label class="admin-label">标语</label><input class="admin-input" data-bind="footer.slogan" value="'+esc(c.footer.slogan)+'"></div><div class="admin-field"><label class="admin-label">电话</label><input class="admin-input" data-bind="footer.phone" value="'+esc(c.footer.phone)+'"></div></div>';
+}
+
+function compressImg(file, maxW, quality, cb){
+  var reader = new FileReader();
+  reader.onload = function(e){
+    var img = new Image();
+    img.onload = function(){
+      try {
+        var w = img.naturalWidth || img.width, h = img.naturalHeight || img.height;
+        if (!w || !h) return cb(null);
+        if (w > maxW){ h = Math.round(h * maxW / w); w = maxW; }
+        var cv = document.createElement('canvas'); cv.width = w; cv.height = h;
+        cv.getContext('2d').drawImage(img, 0, 0, w, h);
+        cb(cv.toDataURL('image/jpeg', quality));
+      } catch(err){ cb(null); }
+    };
+    img.onerror = function(){ cb(null); };
+    img.src = e.target.result;
   };
+  reader.onerror = function(){ cb(null); };
+  reader.readAsDataURL(file);
+}
+
+function syncFromForm(){
+  var out = deepClone(currentCfg);
+  document.querySelectorAll('#adminApp [data-bind]').forEach(function(inp){
+    var path = inp.getAttribute('data-bind'), val = inp.value, parts = path.split('.');
+    if (parts[0] === 'footer' && parts[1] === 'rules'){
+      out.footer.rules = val.split('\n').map(function(s){ return s.trim(); }).filter(Boolean);
+      return;
+    }
+    var obj = out;
+    for (var i = 0; i < parts.length - 1; i++){
+      var k = parts[i];
+      if (obj[k] == null) obj[k] = isNaN(parseInt(parts[i+1], 10)) ? {} : [];
+      obj = obj[k];
+    }
+    obj[parts[parts.length-1]] = val;
+  });
+  currentCfg = normalizeConfig(out);
+  return currentCfg;
+}
+
+renderAdminAll();
+
+var tabsEl = document.getElementById('adminTabs');
+tabsEl.addEventListener('click', function(e){
+  var tab = e.target.closest && e.target.closest('.admin-tab');
+  if (!tab) return;
+  var name = tab.getAttribute('data-tab');
+  document.querySelectorAll('.admin-tab').forEach(function(t){ t.classList.remove('active'); });
+  tab.classList.add('active');
+  document.querySelectorAll('.admin-pane').forEach(function(p){ p.classList.remove('active'); });
+  document.getElementById('pane-' + name).classList.add('active');
+  window.scrollTo(0, 0);
+});
+
+document.getElementById('adminReloadBtn').onclick = function(){
+  if (!connected){ toast('未连接电视', true); return; }
+  requestConfig(false);
+};
+
+document.getElementById('adminSendBtn').onclick = function(){
+  var cfg = syncFromForm();
+  saveDraft();
+  if (!connected){ toast('未连电视，已存草稿', true); return; }
+  if (pendingApply && (Date.now() - pendingApply.ts) < 8000){ toast('还在保存中…', true); return; }
+
+  pendingApply = { ts: Date.now(), cfg: cfg };
+  setStatus('📤 保存中…', 'busy');
+  sendWithRetry({ type:'admin-update', data: cfg }, 3, function(ok, err){
+    if (!ok){
+      pendingApply = null;
+      setStatus('❌ 发送失败', 'err');
+      toast('发送失败: ' + (err || ''), true);
+      return;
+    }
+    toast('📤 已发送，等确认…');
+    var myTs = pendingApply.ts;
+    setTimeout(function(){
+      if (pendingApply && pendingApply.ts === myTs && (Date.now() - pendingApply.ts >= 7500)){
+        pendingApply = null;
+        setStatus('⚠️ 无回执', 'err');
+        toast('电视未确认，请重试', true);
+      }
+    }, 8000);
+  });
+};
+
+document.getElementById('adminApp').addEventListener('input', function(){
+  clearTimeout(window.__draftTimer);
+  window.__draftTimer = setTimeout(function(){
+    try { syncFromForm(); saveDraft(); } catch(e){}
+  }, 500);
+});
+
+document.addEventListener('visibilitychange', function(){
+  if (!document.hidden && connected) doSend({ type:'ping', t: Date.now() });
+});
 </script>
 </body>
 </html>
