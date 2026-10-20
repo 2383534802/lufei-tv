@@ -94,6 +94,12 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
 
       <div class="admin-card">
         <div class="admin-card-title">播放控制器</div>
+        <div style="display:flex; justify-content:space-between; font-size:12px; color:#8b949e; margin-bottom:8px;">
+          <span id="bgTimeCurrent">00:00</span>
+          <span id="bgTimeTotal">00:00</span>
+        </div>
+        <input type="range" id="musicProgress" min="0" max="100" value="0" style="width:100%; cursor:pointer; margin-bottom:15px;">
+        
         <div style="display:flex;gap:10px;margin-bottom:10px;">
           <button class="admin-btn" id="musicPrev" style="flex:1;">⏮ 上一首</button>
           <button class="admin-btn primary" id="musicToggle" style="flex:2;">⏯ 播放/暂停</button>
@@ -102,6 +108,13 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
         <div style="display:flex;gap:10px;">
           <button class="admin-btn" id="musicModeSingle" style="flex:1;">🔂 单曲循环</button>
           <button class="admin-btn" id="musicModeList" style="flex:1;">🔁 列表循环</button>
+        </div>
+      </div>
+
+      <div class="admin-card">
+        <div class="admin-card-title">播放列表 <span id="bgMusicCount" class="count-badge">0 首</span></div>
+        <div id="bgMusicList" style="max-height: 300px; overflow-y: auto;">
+          <!-- 列表渲染区域 -->
         </div>
       </div>
     </div>
@@ -263,6 +276,11 @@ if (cc && TARGET_HOST_ID){
           window.filePC.addIceCandidate(new RTCIceCandidate(m.candidate)).catch(function(){});
           return;
         }
+        // 处理音乐状态同步
+        if (m.type === 'music-state') {
+          updateMusicUI(m);
+          return;
+        }
       } catch(e){}
     });
   } catch(e){}
@@ -277,6 +295,69 @@ function requestConfig(silent){
   sendWithRetry({ type:'admin-request' }, 3, function(ok, err){
     if (ok){ if (!silent) toast('正在拉取…'); }
     else { setStatus('⚠️ 拉取失败', 'err'); if (!silent) toast('拉取失败', true); }
+  });
+}
+
+/* ========= 音乐状态同步与 UI 更新 ========= */
+function formatTime(s) {
+  if (!s || isNaN(s)) return "00:00";
+  var m = Math.floor(s / 60);
+  var sec = Math.floor(s % 60);
+  return (m < 10 ? '0' : '') + m + ':' + (sec < 10 ? '0' : '') + sec;
+}
+
+var progressEl = document.getElementById('musicProgress');
+
+function updateMusicUI(state) {
+  var listEl = document.getElementById('bgMusicList');
+  var countEl = document.getElementById('bgMusicCount');
+  var curTimeEl = document.getElementById('bgTimeCurrent');
+  var totalTimeEl = document.getElementById('bgTimeTotal');
+  var toggleBtn = document.getElementById('musicToggle');
+
+  if (!listEl) return;
+  
+  // 防止拖动进度条时被打断
+  if (document.activeElement !== progressEl) {
+    progressEl.max = state.duration || 0;
+    progressEl.value = state.currentTime || 0;
+  }
+  
+  curTimeEl.textContent = formatTime(state.currentTime);
+  totalTimeEl.textContent = formatTime(state.duration);
+  
+  if (toggleBtn) {
+    toggleBtn.textContent = state.isPlaying ? '⏸ 暂停' : '▶ 播放';
+  }
+  
+  countEl.textContent = state.playlist.length + ' 首';
+  
+  // 重新渲染列表
+  listEl.innerHTML = state.playlist.map((song, index) => {
+    var isActive = (index === state.currentIndex);
+    var bg = isActive ? 'background: rgba(88,166,255,0.15); color: #58a6ff;' : '';
+    return `<div style="display:flex; justify-content:space-between; align-items:center; padding:10px; border-bottom:1px solid #30363d; ${bg}">
+      <div style="flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; cursor:pointer;" onclick="playTargetIndex(${index})">
+        ${index + 1}. ${song.name}
+      </div>
+      <button class="admin-btn small danger" style="padding:4px 8px; margin-left:10px;" onclick="deleteTargetIndex(${index})">删除</button>
+    </div>`;
+  }).join('') || '<div style="text-align:center; color:#8b949e; padding:20px;">暂无音乐</div>';
+}
+
+window.playTargetIndex = function(idx) {
+  doSend({ type: 'music-command', action: 'play-index', payload: idx });
+};
+
+window.deleteTargetIndex = function(idx) {
+  if(confirm('确定删除这首歌吗？')) {
+    doSend({ type: 'music-command', action: 'delete', payload: idx });
+  }
+};
+
+if (progressEl) {
+  progressEl.addEventListener('change', function() {
+    doSend({ type: 'music-command', action: 'seek', payload: parseInt(this.value) });
   });
 }
 
