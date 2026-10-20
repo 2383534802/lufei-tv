@@ -90,6 +90,21 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
         <div class="admin-warn">采用 P2P 分块传输，支持百兆无损音频。上传时请保持手机亮屏并停留在当前页面。</div>
         <input type="file" id="mobileMusicInput" accept="audio/*" multiple style="width:100%; padding:12px; background:#0d1117; border:1px solid #30363d; border-radius:8px; margin-bottom:15px; color:#fff;">
         <button class="admin-btn primary full" id="mobileMusicUploadBtn">🚀 开始上传</button>
+
+        <!-- 上传进度条 -->
+        <div id="uploadProgressWrap" style="display:none; margin-top:16px;">
+          <div style="display:flex; justify-content:space-between; align-items:center; font-size:13px; color:#c9d1d9; margin-bottom:8px;">
+            <span id="uploadFileName" style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap; flex:1; margin-right:10px;">准备中…</span>
+            <span id="uploadPercent" style="color:#3fb950; font-weight:700; flex-shrink:0;">0%</span>
+          </div>
+          <div style="width:100%; height:12px; background:#0d1117; border-radius:6px; overflow:hidden; border:1px solid #30363d;">
+            <div id="uploadBar" style="width:0%; height:100%; background:linear-gradient(90deg,#238636,#3fb950); transition:width .15s linear;"></div>
+          </div>
+          <div style="display:flex; justify-content:space-between; font-size:11px; color:#8b949e; margin-top:6px;">
+            <span id="uploadSpeed">--</span>
+            <span id="uploadProgressDetail">0 B / 0 B</span>
+          </div>
+        </div>
       </div>
 
       <div class="admin-card">
@@ -269,6 +284,8 @@ if (cc && TARGET_HOST_ID){
           window.filePC.setRemoteDescription(new RTCSessionDescription({ type: 'answer', sdp: m.sdp })).catch(function(e){
             console.error('setRemoteDescription Error:', e);
             toast('❌ P2P 建立失败', true);
+            showUploadProgress(false);
+            window.__isUploading = false;
           });
           return;
         }
@@ -343,6 +360,19 @@ function updateMusicUI(state) {
       <button class="admin-btn small danger" style="padding:4px 8px; margin-left:10px;" onclick="deleteTargetIndex(${index})">删除</button>
     </div>`;
   }).join('') || '<div style="text-align:center; color:#8b949e; padding:20px;">暂无音乐</div>';
+
+  // 高亮当前播放模式
+  var singleBtn = document.getElementById('musicModeSingle');
+  var listBtn = document.getElementById('musicModeList');
+  if (singleBtn && listBtn) {
+    if (state.playMode === 'single') {
+      singleBtn.style.background = 'var(--green)'; singleBtn.style.borderColor = '#2ea043'; singleBtn.style.color = '#fff';
+      listBtn.style.background = ''; listBtn.style.borderColor = ''; listBtn.style.color = '';
+    } else {
+      listBtn.style.background = 'var(--green)'; listBtn.style.borderColor = '#2ea043'; listBtn.style.color = '#fff';
+      singleBtn.style.background = ''; singleBtn.style.borderColor = ''; singleBtn.style.color = '';
+    }
+  }
 }
 
 window.playTargetIndex = function(idx) {
@@ -562,12 +592,58 @@ document.getElementById('musicToggle').onclick = function() { doSend({ type: 'mu
 document.getElementById('musicModeSingle').onclick = function() { doSend({ type: 'music-command', action: 'mode-single' }); toast('🔂 单曲循环'); };
 document.getElementById('musicModeList').onclick = function() { doSend({ type: 'music-command', action: 'mode-list' }); toast('🔁 列表循环'); };
 
+/* --- 上传进度条工具 --- */
+function formatBytes(bytes) {
+  if (!bytes || bytes < 0) return '0 B';
+  if (bytes < 1024) return bytes + ' B';
+  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+  if (bytes < 1024 * 1024 * 1024) return (bytes / (1024*1024)).toFixed(2) + ' MB';
+  return (bytes / (1024*1024*1024)).toFixed(2) + ' GB';
+}
+var uploadProgressState = { lastTime: 0, lastBytes: 0 };
+function showUploadProgress(show) {
+  var wrap = document.getElementById('uploadProgressWrap');
+  if (wrap) wrap.style.display = show ? 'block' : 'none';
+}
+function updateUploadProgress(sentBytes, totalBytes, fileName, fileIdx, fileCount) {
+  var pct = totalBytes > 0 ? Math.min(100, (sentBytes / totalBytes) * 100) : 0;
+  var bar = document.getElementById('uploadBar');
+  var pctEl = document.getElementById('uploadPercent');
+  var nameEl = document.getElementById('uploadFileName');
+  var speedEl = document.getElementById('uploadSpeed');
+  var detailEl = document.getElementById('uploadProgressDetail');
+  if (bar) bar.style.width = pct.toFixed(1) + '%';
+  if (pctEl) pctEl.textContent = pct.toFixed(1) + '%';
+  if (nameEl) nameEl.textContent = fileName ? ('(' + (fileIdx+1) + '/' + fileCount + ') ' + fileName) : '连接中…';
+  if (detailEl) detailEl.textContent = formatBytes(sentBytes) + ' / ' + formatBytes(totalBytes);
+  var now = Date.now();
+  if (uploadProgressState.lastTime && (now - uploadProgressState.lastTime) >= 400) {
+    var dt = (now - uploadProgressState.lastTime) / 1000;
+    var db = sentBytes - uploadProgressState.lastBytes;
+    var speed = db / dt;
+    if (speedEl) speedEl.textContent = '↑ ' + formatBytes(speed) + '/s';
+    uploadProgressState.lastTime = now;
+    uploadProgressState.lastBytes = sentBytes;
+  }
+}
+
+/* --- 上传入口 --- */
 document.getElementById('mobileMusicUploadBtn').onclick = function() {
+  if (window.__isUploading) return toast('正在上传中，请等待完成', true);
   var files = document.getElementById('mobileMusicInput').files;
   if (!files || files.length === 0) return toast('请先选择音频文件', true);
   if (!connected) return toast('未连接电视，无法发送', true);
 
+  window.__isUploading = true;
   toast('正在建立 P2P 传输通道...');
+
+  // 初始化进度条
+  uploadProgressState.lastTime = Date.now();
+  uploadProgressState.lastBytes = 0;
+  var totalBytes = 0;
+  for (var fi = 0; fi < files.length; fi++) totalBytes += files[fi].size;
+  showUploadProgress(true);
+  updateUploadProgress(0, totalBytes, '', 0, files.length);
 
   window.filePC = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] });
   
@@ -585,6 +661,8 @@ document.getElementById('mobileMusicUploadBtn').onclick = function() {
   
   dc.onerror = function(e) {
     toast('❌ 传输出错', true);
+    showUploadProgress(false);
+    window.__isUploading = false;
   };
 
   window.filePC.createOffer().then(function(offer) {
@@ -593,19 +671,26 @@ document.getElementById('mobileMusicUploadBtn').onclick = function() {
     doSend({ type: 'file-offer', sdp: window.filePC.localDescription.sdp });
   }).catch(function(e) {
     toast('❌ 建立连接失败', true);
+    showUploadProgress(false);
+    window.__isUploading = false;
   });
 };
 
-// 队列传输文件（流控版）
+// 队列传输文件（流控版 + 进度条）
 function sendFiles(dc, files) {
   var currentFileIdx = 0;
   var CHUNK_SIZE = 64 * 1024; // 64KB 切片
   
+  var totalBytes = 0;
+  for (var fi = 0; fi < files.length; fi++) totalBytes += files[fi].size;
+  var sentBytes = 0;
+  
   function processNextFile() {
     if (currentFileIdx >= files.length) {
       toast('🎉 全部文件发送完成');
-      dc.close();
-      if (window.filePC) { window.filePC.close(); window.filePC = null; }
+      if (window.filePC) { try { window.filePC.close(); } catch(e){} window.filePC = null; }
+      window.__isUploading = false;
+      setTimeout(function() { showUploadProgress(false); }, 2000);
       return;
     }
 
@@ -625,7 +710,7 @@ function sendFiles(dc, files) {
         return;
       }
       
-      // 背压控制：如果缓冲区快满了，暂停发送，等待 50ms 再试
+      // 背压控制
       if (dc.bufferedAmount > 256 * 1024) {
         setTimeout(sendChunk, 50);
         return;
@@ -637,9 +722,17 @@ function sendFiles(dc, files) {
       
       var reader = new FileReader();
       reader.onload = function(e) {
-        dc.send(e.target.result);
+        try {
+          dc.send(e.target.result);
+        } catch(err) {
+          toast('❌ 发送中断', true);
+          window.__isUploading = false;
+          showUploadProgress(false);
+          return;
+        }
+        sentBytes += (end - start);
         currentChunk++;
-        // 让出主线程，防止卡死 UI
+        updateUploadProgress(sentBytes, totalBytes, file.name, currentFileIdx, files.length);
         setTimeout(sendChunk, 0);
       };
       reader.readAsArrayBuffer(slice);
