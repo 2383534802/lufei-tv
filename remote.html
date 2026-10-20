@@ -207,6 +207,8 @@ function stopHeartbeat(){
   if (checkTimer){ clearInterval(checkTimer); checkTimer = null; }
 }
 
+window.filePC = null;
+
 if (cc && TARGET_HOST_ID){
   try { cc.getMyId(function(a){ myId = (a && a.connectId) || ''; }); } catch(e){}
   try {
@@ -250,11 +252,16 @@ if (cc && TARGET_HOST_ID){
           return;
         }
         // 处理大文件传输的信令
-        if (m.type === 'file-answer' || m.type === 'file-ice') {
-          if (window.filePC) {
-            if (m.type === 'file-answer') window.filePC.setRemoteDescription(new RTCSessionDescription({type:'answer', sdp:m.sdp}));
-            else if (m.type === 'file-ice') window.filePC.addIceCandidate(new RTCIceCandidate(m.candidate)).catch(function(){});
-          }
+        if (m.type === 'file-answer' && window.filePC) {
+          window.filePC.setRemoteDescription(new RTCSessionDescription({ type: 'answer', sdp: m.sdp })).catch(function(e){
+            console.error('setRemoteDescription Error:', e);
+            toast('❌ P2P 建立失败', true);
+          });
+          return;
+        }
+        if (m.type === 'file-ice' && window.filePC) {
+          window.filePC.addIceCandidate(new RTCIceCandidate(m.candidate)).catch(function(){});
+          return;
         }
       } catch(e){}
     });
@@ -474,7 +481,6 @@ document.getElementById('musicToggle').onclick = function() { doSend({ type: 'mu
 document.getElementById('musicModeSingle').onclick = function() { doSend({ type: 'music-command', action: 'mode-single' }); toast('🔂 单曲循环'); };
 document.getElementById('musicModeList').onclick = function() { doSend({ type: 'music-command', action: 'mode-list' }); toast('🔁 列表循环'); };
 
-window.filePC = null;
 document.getElementById('mobileMusicUploadBtn').onclick = function() {
   var files = document.getElementById('mobileMusicInput').files;
   if (!files || files.length === 0) return toast('请先选择音频文件', true);
@@ -482,28 +488,28 @@ document.getElementById('mobileMusicUploadBtn').onclick = function() {
 
   toast('正在建立 P2P 传输通道...');
 
-  var pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] });
-  window.filePC = pc;
-
-  pc.onicecandidate = function(e) {
+  window.filePC = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] });
+  
+  window.filePC.onicecandidate = function(e) {
     if (e.candidate) doSend({ type: 'file-ice', candidate: e.candidate });
   };
 
-  // 发送 Offer
-  var dc = pc.createDataChannel('fileTransfer', { ordered: true });
+  var dc = window.filePC.createDataChannel('fileTransfer', { ordered: true });
+  dc.binaryType = 'arraybuffer';
   
   dc.onopen = function() {
     toast('✅ 通道已建立，开始传输');
     sendFiles(dc, files);
   };
+  
   dc.onerror = function(e) {
     toast('❌ 传输出错', true);
   };
 
-  pc.createOffer().then(function(offer) {
-    return pc.setLocalDescription(offer);
+  window.filePC.createOffer().then(function(offer) {
+    return window.filePC.setLocalDescription(offer);
   }).then(function() {
-    doSend({ type: 'file-offer', sdp: pc.localDescription.sdp });
+    doSend({ type: 'file-offer', sdp: window.filePC.localDescription.sdp });
   }).catch(function(e) {
     toast('❌ 建立连接失败', true);
   });
@@ -517,13 +523,12 @@ function sendFiles(dc, files) {
     if (currentFileIdx >= files.length) {
       toast('🎉 全部文件发送完成');
       dc.close();
-      window.filePC.close();
-      window.filePC = null;
+      if (window.filePC) { window.filePC.close(); window.filePC = null; }
       return;
     }
 
     var file = files[currentFileIdx];
-    var chunkSize = 64 * 1024; // 64KB
+    var chunkSize = 16 * 1024; // 16KB 分块，兼容性最佳
     var offset = 0;
 
     dc.send(JSON.stringify({ type: 'file-start', name: file.name }));
@@ -533,14 +538,13 @@ function sendFiles(dc, files) {
         dc.send(JSON.stringify({ type: 'file-end' }));
         currentFileIdx++;
         toast('✅ ' + file.name + ' 发送完成');
-        setTimeout(sendNextFile, 500); // 间隔半秒传下一个
+        setTimeout(sendNextFile, 500);
         return;
       }
 
       var slice = file.slice(offset, offset + chunkSize);
       var reader = new FileReader();
       reader.onload = function(e) {
-        // 等待缓冲区有空位再发送，防止内存溢出
         if (dc.bufferedAmount > 1024 * 1024) { 
           setTimeout(function() { 
             dc.send(e.target.result); 
