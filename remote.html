@@ -577,6 +577,7 @@ document.getElementById('mobileMusicUploadBtn').onclick = function() {
 
   var dc = window.filePC.createDataChannel('fileTransfer', { ordered: true });
   dc.binaryType = 'arraybuffer';
+  dc.bufferedAmountLowThreshold = 1024 * 1024; // 1MB 低水位线，防止内存溢出
   
   dc.onopen = function() {
     toast('✅ 通道已建立，开始传输');
@@ -609,7 +610,7 @@ function sendFiles(dc, files) {
     }
 
     var file = files[currentFileIdx];
-    var chunkSize = 16 * 1024; // 16KB 分块，兼容性最佳
+    var chunkSize = 16 * 1024; // 16KB 分块
     var offset = 0;
 
     dc.send(JSON.stringify({ type: 'file-start', name: file.name }));
@@ -626,12 +627,14 @@ function sendFiles(dc, files) {
       var slice = file.slice(offset, offset + chunkSize);
       var reader = new FileReader();
       reader.onload = function(e) {
+        // 关键：如果缓冲区快满了，就暂停读取，等水位下降再读
         if (dc.bufferedAmount > 1024 * 1024) { 
-          setTimeout(function() { 
-            dc.send(e.target.result); 
-            offset += chunkSize; 
-            readChunk(); 
-          }, 50);
+          dc.onbufferedamountlow = function() {
+            dc.onbufferedamountlow = null;
+            dc.send(e.target.result);
+            offset += chunkSize;
+            readChunk();
+          };
         } else {
           dc.send(e.target.result);
           offset += chunkSize;
