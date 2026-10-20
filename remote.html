@@ -31,9 +31,13 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
 .admin-label{font-size:13px;color:#8b949e}
 .admin-input,.admin-textarea{width:100%;padding:11px 14px;font-size:15px;color:#e6edf3;background:#0d1117;border:1px solid #30363d;border-radius:8px;outline:none;font-family:inherit}
 .admin-input:focus,.admin-textarea:focus{border-color:var(--accent)}
+.admin-input[readonly]{opacity:.7;cursor:not-allowed;background:#0a0c10}
 .admin-textarea{min-height:80px;resize:vertical;line-height:1.5}
 .admin-row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .admin-accent{width:100%;height:42px;border:1px solid #30363d;border-radius:8px;background:#0d1117;cursor:pointer}
+.admin-range{width:100%;height:6px;-webkit-appearance:none;appearance:none;background:#30363d;border-radius:3px;outline:none;cursor:pointer;margin:6px 0}
+.admin-range::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;width:22px;height:22px;border-radius:50%;background:var(--green);cursor:pointer;box-shadow:0 2px 6px rgba(0,0,0,.4);border:none}
+.admin-range::-moz-range-thumb{width:22px;height:22px;border-radius:50%;background:var(--green);cursor:pointer;border:none;box-shadow:0 2px 6px rgba(0,0,0,.4)}
 .admin-btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:11px 20px;font-size:15px;font-weight:600;color:var(--text);background:var(--stroke);border:1px solid #30363d;border-radius:9px;cursor:pointer;font-family:inherit;white-space:nowrap}
 .admin-btn:active{transform:scale(.97)}
 .admin-btn.primary{background:var(--green);border-color:#2ea043;color:#fff}
@@ -64,6 +68,7 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
 .admin-modal-btns .admin-btn{flex:1}
 .admin-info{font-size:13px;color:#8b949e;text-align:center;margin-bottom:14px}
 .admin-info .code{font-size:18px;font-weight:700;color:#3fb950;letter-spacing:3px;font-family:monospace}
+.admin-range-value{font-size:16px;font-weight:700;color:#3fb950;font-family:monospace;margin-left:8px}
 @media (max-width: 480px){ .admin-row{grid-template-columns:1fr;} .admin-body{padding:16px 14px 130px;} .admin-card{padding:16px;} .admin-input,.admin-textarea{font-size:16px;} }
 </style>
 </head>
@@ -78,6 +83,7 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
     <div class="admin-tabs" id="adminTabs">
       <button class="admin-tab active" data-tab="basic">基本</button>
       <button class="admin-tab" data-tab="prices">价格</button>
+      <button class="admin-tab" data-tab="schedule">时段</button>
       <button class="admin-tab" data-tab="vip">会员</button>
       <button class="admin-tab" data-tab="announce">公告</button>
       <button class="admin-tab" data-tab="bg">背景</button>
@@ -85,6 +91,7 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
     </div>
     <div class="admin-pane active" id="pane-basic"></div>
     <div class="admin-pane" id="pane-prices"></div>
+    <div class="admin-pane" id="pane-schedule"></div>
     <div class="admin-pane" id="pane-vip"></div>
     <div class="admin-pane" id="pane-announce"></div>
     <div class="admin-pane" id="pane-bg"></div>
@@ -135,7 +142,6 @@ function hostFromCode(code){
   return map[code] || '';
 }
 
-/* 有 host 就存一份 */
 if (urlHost) {
   try { localStorage.setItem('lufei_tv_host', urlHost); } catch(e){}
   if (urlCode) saveCodeMapping(urlCode, urlHost);
@@ -143,7 +149,6 @@ if (urlHost) {
 
 var TARGET_HOST_ID = urlHost || localStorage.getItem('lufei_tv_host') || '';
 
-/* 顶栏提示 */
 function renderInfoBar(){
   var bar = document.getElementById('adminInfoBar');
   if (!bar) return;
@@ -199,7 +204,6 @@ if (codeInput) {
 document.getElementById('codeOkBtn').onclick = function(){ tryConnectByCode(codeInput.value); };
 document.getElementById('codeCancelBtn').onclick = function(){ closeCodeModal(); };
 
-/* 没有 host：打开配对码输入弹窗 */
 if (!TARGET_HOST_ID) {
   setTimeout(openCodeModal, 200);
 }
@@ -240,7 +244,18 @@ var DEFAULT_CONFIG = {
       { name:'豪华包', price:'49.9', config:'9800X3D + 5080', accent:'#ff6d00' }
     ]}
   },
-  bg: { default:'bjsp/常规时段.jpg', morning:'bjsp/包早时段.jpg', night:'bjsp/包宿时段.jpg' },
+  bg: {
+    default:'bjsp/常规时段.jpg',
+    morning:'bjsp/包早时段.jpg',
+    night:'bjsp/包宿时段.jpg',
+    opacity: 0.6
+  },
+  schedule: {
+    morningStart: '07:00',
+    morningEnd: '13:00',
+    nightStart: '21:55',
+    nightEnd: '07:00'
+  },
   footer: {
     rules: ['未成年人禁止入内','请携带有效身份证件登记','大厅禁止吸烟','妥善保管个人物品'],
     slogan: '路飞电竞 · 畅享游戏世界',
@@ -251,6 +266,13 @@ var DEFAULT_CONFIG = {
 function deepClone(o){ return JSON.parse(JSON.stringify(o)); }
 function esc(s){ return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 function toHex(c){ if (typeof c !== 'string') return '#00ff9d'; if (/^#[0-9a-f]{6}$/i.test(c)) return c; if (/^#[0-9a-f]{3}$/i.test(c)) return '#'+c[1]+c[1]+c[2]+c[2]+c[3]+c[3]; return '#00ff9d'; }
+function normalizeTimeStr(s){
+  var m = /^(\d{1,2}):(\d{2})$/.exec(String(s||''));
+  if (!m) return null;
+  var h = parseInt(m[1],10), mi = parseInt(m[2],10);
+  if (isNaN(h) || isNaN(mi) || h<0 || h>23 || mi<0 || mi>59) return null;
+  return (h<10?'0'+h:h) + ':' + (mi<10?'0'+mi:mi);
+}
 
 function normalizeConfig(saved){
   var out = deepClone(DEFAULT_CONFIG);
@@ -278,12 +300,31 @@ function normalizeConfig(saved){
       }
     });
   }
-  if (saved.bg && typeof saved.bg === 'object'){ ['default','morning','night'].forEach(function(k){ if (typeof saved.bg[k] === 'string') out.bg[k] = saved.bg[k]; }); }
+  if (saved.bg && typeof saved.bg === 'object'){
+    ['default','morning','night'].forEach(function(k){ if (typeof saved.bg[k] === 'string') out.bg[k] = saved.bg[k]; });
+    if (typeof saved.bg.opacity === 'number' && saved.bg.opacity >= 0 && saved.bg.opacity <= 1){
+      out.bg.opacity = saved.bg.opacity;
+    } else if (typeof saved.bg.opacity === 'string' && saved.bg.opacity !== ''){
+      var op = parseFloat(saved.bg.opacity);
+      if (!isNaN(op) && op >= 0 && op <= 1) out.bg.opacity = op;
+    }
+  }
+  if (saved.schedule && typeof saved.schedule === 'object'){
+    ['morningStart','morningEnd','nightStart','nightEnd'].forEach(function(k){
+      var t = normalizeTimeStr(saved.schedule[k]);
+      if (t) out.schedule[k] = t;
+    });
+  }
   if (saved.footer && typeof saved.footer === 'object'){
     if (Array.isArray(saved.footer.rules) && saved.footer.rules.length){ out.footer.rules = saved.footer.rules.map(function(r){ return r!=null?String(r):''; }); }
     if (typeof saved.footer.slogan === 'string') out.footer.slogan = saved.footer.slogan;
     if (typeof saved.footer.phone === 'string') out.footer.phone = saved.footer.phone;
   }
+
+  /* unit 由 schedule 生成，保证一致 */
+  out.prices.night.unit = out.schedule.nightStart + ' — ' + out.schedule.nightEnd;
+  out.prices.morning.unit = out.schedule.morningStart + ' — ' + out.schedule.morningEnd;
+
   return out;
 }
 
@@ -418,6 +459,7 @@ function saveDraft(){ try { localStorage.setItem('lufei_admin_draft', JSON.strin
 function renderAdminAll(){
   try { renderBasic(); } catch(e){}
   try { renderPrices(); } catch(e){}
+  try { renderSchedule(); } catch(e){}
   try { renderVIP(); } catch(e){}
   try { renderAnnounce(); } catch(e){}
   try { renderBg(); } catch(e){}
@@ -445,7 +487,14 @@ function renderPrices(){
     if (isFull) html += '<div class="admin-progress full">已达上限，不能再新增</div>';
     else if (count === 0) html += '<div class="admin-progress">还没有卡片</div>';
     else html += '<div class="admin-progress">还能再加 ' + (MAX_CARDS - count) + ' 张</div>';
-    html += '<div class="admin-row"><div class="admin-field"><label class="admin-label">标题</label><input class="admin-input" data-bind="prices.'+key+'.title" value="'+esc(section.title)+'"></div><div class="admin-field"><label class="admin-label">时段/单位</label><input class="admin-input" data-bind="prices.'+key+'.unit" value="'+esc(section.unit)+'"></div></div>';
+
+    if (key === 'timer'){
+      html += '<div class="admin-row"><div class="admin-field"><label class="admin-label">标题</label><input class="admin-input" data-bind="prices.timer.title" value="'+esc(section.title)+'"></div><div class="admin-field"><label class="admin-label">单位</label><input class="admin-input" data-bind="prices.timer.unit" value="'+esc(section.unit)+'"></div></div>';
+    } else {
+      html += '<div class="admin-warn">时段自动从「时段」页读取，如需修改请切到「时段」标签</div>';
+      html += '<div class="admin-row"><div class="admin-field"><label class="admin-label">标题</label><input class="admin-input" data-bind="prices.'+key+'.title" value="'+esc(section.title)+'"></div><div class="admin-field"><label class="admin-label">时段（自动）</label><input class="admin-input" readonly value="'+esc(section.unit)+'"></div></div>';
+    }
+
     section.cards.forEach(function(card, i){
       html += '<div style="margin-top:14px;padding-top:14px;border-top:1px dashed #30363d"><div class="admin-item-head"><span class="admin-item-idx">卡片 '+(i+1)+'</span><button class="admin-btn small danger" data-price-del="'+key+'-'+i+'">删除</button></div>' +
         '<div class="admin-field"><label class="admin-label">名称</label><input class="admin-input" data-bind="prices.'+key+'.cards.'+i+'.name" value="'+esc(card.name)+'"></div>' +
@@ -475,6 +524,24 @@ function renderPrices(){
   });
 }
 
+function renderSchedule(){
+  var c = currentCfg;
+  var sch = c.schedule || DEFAULT_CONFIG.schedule;
+  document.getElementById('pane-schedule').innerHTML =
+    '<div class="admin-card"><div class="admin-card-title">时段设置</div>' +
+      '<div class="admin-warn">调整后价格标签自动同步；电视端会按时段自动切换布局</div>' +
+      '<div class="admin-row">' +
+        '<div class="admin-field"><label class="admin-label">包早开始</label><input class="admin-input" type="time" data-bind="schedule.morningStart" value="'+esc(sch.morningStart)+'"></div>' +
+        '<div class="admin-field"><label class="admin-label">包早结束</label><input class="admin-input" type="time" data-bind="schedule.morningEnd" value="'+esc(sch.morningEnd)+'"></div>' +
+      '</div>' +
+      '<div class="admin-row">' +
+        '<div class="admin-field"><label class="admin-label">包宿开始</label><input class="admin-input" type="time" data-bind="schedule.nightStart" value="'+esc(sch.nightStart)+'"></div>' +
+        '<div class="admin-field"><label class="admin-label">包宿结束</label><input class="admin-input" type="time" data-bind="schedule.nightEnd" value="'+esc(sch.nightEnd)+'"></div>' +
+      '</div>' +
+      '<div class="admin-warn">包宿时段若跨天（如 21:55 → 07:00），结束时间小于开始时间是正常的；包早一般为同天时段</div>' +
+    '</div>';
+}
+
 function renderVIP(){
   var c = currentCfg, html = '<div class="admin-card"><div class="admin-card-title">会员充值<span class="count-badge">'+c.vip.length+' 条</span></div>';
   c.vip.forEach(function(v, i){
@@ -502,13 +569,38 @@ function renderAnnounce(){
 }
 
 function renderBg(){
-  var c = currentCfg, labels = { default:'常规', morning:'包早', night:'包宿' }, html = '<div class="admin-card"><div class="admin-card-title">背景图片</div>';
+  var c = currentCfg;
+  var labels = { default:'常规', morning:'包早', night:'包宿' };
+  var opacity = (typeof c.bg.opacity === 'number') ? c.bg.opacity : 0.6;
+
+  var html = '';
+  /* 透明度卡片 */
+  html += '<div class="admin-card"><div class="admin-card-title">背景透明度</div>' +
+    '<div class="admin-field"><label class="admin-label">透明度 <span class="admin-range-value" id="bgOpacityLabel">' + opacity.toFixed(2) + '</span></label>' +
+    '<input type="range" class="admin-range" data-bind="bg.opacity" min="0" max="1" step="0.05" value="' + opacity + '"></div>' +
+    '<div class="admin-warn">0 = 完全透明（看不到背景图）；1 = 完全不透明。建议 0.3 ~ 0.7 之间</div>' +
+  '</div>';
+
+  /* 图片卡片 */
+  html += '<div class="admin-card"><div class="admin-card-title">背景图片</div>';
   ['default','morning','night'].forEach(function(key){
     html += '<div style="margin-bottom:16px;padding-bottom:16px;border-bottom:1px dashed #30363d" data-bgcard="'+key+'"><div class="admin-label" style="margin-bottom:8px">'+labels[key]+'</div><div class="admin-bg-preview" data-bgpreview="'+key+'"></div><div class="admin-field" style="margin-top:10px"><label class="admin-label">图片地址</label><input class="admin-input" data-bind="bg.'+key+'" value="'+esc(c.bg[key])+'"></div><div style="display:flex;gap:8px"><label class="admin-btn small">📁 上传<input type="file" accept="image/*" data-bgfile="'+key+'" style="display:none"></label><button class="admin-btn small" data-bgrefresh="'+key+'">👁 预览</button></div></div>';
   });
   html += '</div>';
+
   document.getElementById('pane-bg').innerHTML = html;
+
   ['default','morning','night'].forEach(refreshBgPreview);
+
+  var range = document.querySelector('[data-bind="bg.opacity"]');
+  if (range){
+    range.addEventListener('input', function(){
+      var val = parseFloat(range.value);
+      var lbl = document.getElementById('bgOpacityLabel');
+      if (lbl) lbl.textContent = isNaN(val) ? '--' : val.toFixed(2);
+    });
+  }
+
   document.querySelectorAll('[data-bgfile]').forEach(function(inp){
     inp.onchange = function(){
       var key = inp.getAttribute('data-bgfile'), f = inp.files && inp.files[0];
@@ -528,6 +620,7 @@ function renderBg(){
     btn.onclick = function(){ refreshBgPreview(btn.getAttribute('data-bgrefresh')); };
   });
   document.querySelectorAll('[data-bind^="bg."]').forEach(function(inp){
+    if (inp.getAttribute('data-bind') === 'bg.opacity') return;
     inp.addEventListener('input', function(){
       var parts = inp.getAttribute('data-bind').split('.');
       refreshBgPreview(parts[1]);
@@ -578,6 +671,16 @@ function syncFromForm(){
       out.footer.rules = val.split('\n').map(function(s){ return s.trim(); }).filter(Boolean);
       return;
     }
+    if (parts[0] === 'bg' && parts[1] === 'opacity'){
+      var op = parseFloat(val);
+      if (!isNaN(op) && op >= 0 && op <= 1) out.bg.opacity = op;
+      return;
+    }
+    if (parts[0] === 'schedule'){
+      var t = normalizeTimeStr(val);
+      if (t) out.schedule[parts[1]] = t;
+      return;
+    }
     var obj = out;
     for (var i = 0; i < parts.length - 1; i++){
       var k = parts[i];
@@ -586,6 +689,17 @@ function syncFromForm(){
     }
     obj[parts[parts.length-1]] = val;
   });
+
+  /* unit 由 schedule 生成 */
+  if (out.schedule){
+    if (out.schedule.nightStart && out.schedule.nightEnd){
+      out.prices.night.unit = out.schedule.nightStart + ' — ' + out.schedule.nightEnd;
+    }
+    if (out.schedule.morningStart && out.schedule.morningEnd){
+      out.prices.morning.unit = out.schedule.morningStart + ' — ' + out.schedule.morningEnd;
+    }
+  }
+
   currentCfg = normalizeConfig(out);
   return currentCfg;
 }
@@ -647,7 +761,6 @@ document.addEventListener('visibilitychange', function(){
   if (!document.hidden && connected) doSend({ type:'ping', t: Date.now() });
 });
 
-/* 点击"拉取"按钮时，如果还没 host 再弹配对码 */
 document.getElementById('adminReloadBtn').addEventListener('click', function(){
   if (!TARGET_HOST_ID) openCodeModal();
 });
