@@ -52,10 +52,9 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
 .admin-modal-input:focus{border-color:var(--accent)}
 .admin-modal-btns{display:flex;gap:10px}
 .admin-modal-btns .admin-btn{flex:1}
-.admin-info{font-size:13px;color:#8b949e;text-align:center;margin-bottom:14px}
-.admin-info .code{font-size:18px;font-weight:700;color:#3fb950;letter-spacing:3px;font-family:monospace}
 .admin-warn{font-size:13px;color:#8b949e;line-height:1.7;padding:12px;background:rgba(88,166,255,.06);border-radius:8px;border-left:3px solid var(--accent);margin-bottom:14px;word-break:break-all}
 .admin-warn.danger{color:#f85149;background:rgba(248,81,73,.08);border-left-color:#f85149}
+.count-badge{font-size:12px;font-weight:600;color:var(--accent);background:rgba(88,166,255,.12);padding:3px 9px;border-radius:6px}
 @media (max-width: 480px){ .admin-row{grid-template-columns:1fr;} .admin-body{padding:16px 14px 130px;} .admin-card{padding:16px;} .admin-input,.admin-textarea{font-size:16px;} }
 </style>
 </head>
@@ -66,7 +65,6 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
     <div class="admin-status" id="adminStatus">初始化…</div>
   </div>
   <div class="admin-body">
-    <div class="admin-info" id="adminInfoBar"></div>
     <div class="admin-tabs" id="adminTabs">
       <button class="admin-tab active" data-tab="basic">基本</button>
       <button class="admin-tab" data-tab="prices">价格</button>
@@ -88,22 +86,22 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
     
     <div class="admin-pane" id="pane-music">
       <div class="admin-card">
-        <div class="admin-card-title">📁 批量上传音乐</div>
-        <div class="admin-warn">支持一次选择多个音频文件。因为走的是局域网直连，请在保持页面开启的情况下等待上传完成，不要锁屏或切后台。</div>
+        <div class="admin-card-title">📁 大文件上传</div>
+        <div class="admin-warn">采用 P2P 分块传输，支持百兆无损音频。上传时请保持手机亮屏并停留在当前页面。</div>
         <input type="file" id="mobileMusicInput" accept="audio/*" multiple style="width:100%; padding:12px; background:#0d1117; border:1px solid #30363d; border-radius:8px; margin-bottom:15px; color:#fff;">
-        <button class="admin-btn primary full" id="mobileMusicUploadBtn">🚀 开始批量上传</button>
+        <button class="admin-btn primary full" id="mobileMusicUploadBtn">🚀 开始上传</button>
       </div>
 
       <div class="admin-card">
-        <div class="admin-card-title">音乐遥控器</div>
+        <div class="admin-card-title">播放控制器</div>
         <div style="display:flex;gap:10px;margin-bottom:10px;">
           <button class="admin-btn" id="musicPrev" style="flex:1;">⏮ 上一首</button>
           <button class="admin-btn primary" id="musicToggle" style="flex:2;">⏯ 播放/暂停</button>
           <button class="admin-btn" id="musicNext" style="flex:1;">⏭ 下一首</button>
         </div>
         <div style="display:flex;gap:10px;">
-          <button class="admin-btn full" id="musicOpen">📺 打开面板</button>
-          <button class="admin-btn full danger" id="musicClose">❌ 关闭面板</button>
+          <button class="admin-btn" id="musicModeSingle" style="flex:1;">🔂 单曲循环</button>
+          <button class="admin-btn" id="musicModeList" style="flex:1;">🔁 列表循环</button>
         </div>
       </div>
     </div>
@@ -241,7 +239,6 @@ if (cc && TARGET_HOST_ID){
         if (m.type === 'admin-config' && m.data){
           currentCfg = normalizeConfig(m.data);
           if (m.code && TARGET_HOST_ID) saveCodeMapping(String(m.code), TARGET_HOST_ID);
-          renderInfoBar();
           renderAdminAll();
           saveDraft();
           toast('✅ 已拉取配置');
@@ -251,6 +248,13 @@ if (cc && TARGET_HOST_ID){
           if (m.ok === false){ toast('❌ 保存失败', true); }
           else { toast('✅ 已应用'); }
           return;
+        }
+        // 处理大文件传输的信令
+        if (m.type === 'file-answer' || m.type === 'file-ice') {
+          if (window.filePC) {
+            if (m.type === 'file-answer') window.filePC.setRemoteDescription(new RTCSessionDescription({type:'answer', sdp:m.sdp}));
+            else if (m.type === 'file-ice') window.filePC.addIceCandidate(new RTCIceCandidate(m.candidate)).catch(function(){});
+          }
         }
       } catch(e){}
     });
@@ -269,7 +273,7 @@ function requestConfig(silent){
   });
 }
 
-/* ========= 表单与渲染逻辑 ========= */
+/* ========= 配置表单逻辑 ========= */
 var DEFAULT_CONFIG = {
   brand: { name:'路飞电竞', sub:'LUFEI E-SPORTS', logo:'https://diskmirror.lingyuzhao.top/1193/Binary/logo.png' },
   service: { hours:'24H 全天候', wifiName:'路飞电竞', wifiPwd:'lufeidianjing', hotline:'166 0418 6135' },
@@ -344,8 +348,6 @@ try { var draftRaw = localStorage.getItem('lufei_admin_draft'); if (draftRaw) cu
 if (!currentCfg) currentCfg = deepClone(DEFAULT_CONFIG);
 
 function saveDraft(){ try { localStorage.setItem('lufei_admin_draft', JSON.stringify(currentCfg)); } catch(e){} }
-
-function renderInfoBar(){}
 
 function renderAdminAll(){
   renderBasic(); renderPrices(); renderSchedule(); renderVIP(); renderAnnounce(); renderBg(); renderFooter();
@@ -465,57 +467,101 @@ document.getElementById('adminSendBtn').onclick = function(){
   });
 };
 
-/* ========= 音乐控制逻辑 ========= */
+/* ========= 音乐控制与文件传输逻辑 ========= */
 document.getElementById('musicPrev').onclick = function() { doSend({ type: 'music-command', action: 'prev' }); toast('⏮ 上一首'); };
 document.getElementById('musicNext').onclick = function() { doSend({ type: 'music-command', action: 'next' }); toast('⏭ 下一首'); };
 document.getElementById('musicToggle').onclick = function() { doSend({ type: 'music-command', action: 'toggle' }); toast('⏯ 播放/暂停'); };
-document.getElementById('musicOpen').onclick = function() { doSend({ type: 'music-command', action: 'open' }); toast('📺 打开面板'); };
-document.getElementById('musicClose').onclick = function() { doSend({ type: 'music-command', action: 'close' }); toast('❌ 关闭面板'); };
+document.getElementById('musicModeSingle').onclick = function() { doSend({ type: 'music-command', action: 'mode-single' }); toast('🔂 单曲循环'); };
+document.getElementById('musicModeList').onclick = function() { doSend({ type: 'music-command', action: 'mode-list' }); toast('🔁 列表循环'); };
 
-/* ========= 批量上传音乐逻辑 ========= */
+window.filePC = null;
 document.getElementById('mobileMusicUploadBtn').onclick = function() {
   var files = document.getElementById('mobileMusicInput').files;
   if (!files || files.length === 0) return toast('请先选择音频文件', true);
+  if (!connected) return toast('未连接电视，无法发送', true);
+
+  toast('正在建立 P2P 传输通道...');
+
+  var pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] });
+  window.filePC = pc;
+
+  pc.onicecandidate = function(e) {
+    if (e.candidate) doSend({ type: 'file-ice', candidate: e.candidate });
+  };
+
+  // 发送 Offer
+  var dc = pc.createDataChannel('fileTransfer', { ordered: true });
   
-  toast(`准备上传 ${files.length} 首歌曲...`);
-  var currentIndex = 0;
+  dc.onopen = function() {
+    toast('✅ 通道已建立，开始传输');
+    sendFiles(dc, files);
+  };
+  dc.onerror = function(e) {
+    toast('❌ 传输出错', true);
+  };
 
-  function uploadNext() {
-    if (currentIndex >= files.length) {
-      toast('🎉 全部上传完成');
-      document.getElementById('mobileMusicInput').value = ''; 
+  pc.createOffer().then(function(offer) {
+    return pc.setLocalDescription(offer);
+  }).then(function() {
+    doSend({ type: 'file-offer', sdp: pc.localDescription.sdp });
+  }).catch(function(e) {
+    toast('❌ 建立连接失败', true);
+  });
+};
+
+// 队列传输文件
+function sendFiles(dc, files) {
+  var currentFileIdx = 0;
+  
+  function sendNextFile() {
+    if (currentFileIdx >= files.length) {
+      toast('🎉 全部文件发送完成');
+      dc.close();
+      window.filePC.close();
+      window.filePC = null;
       return;
     }
 
-    var file = files[currentIndex];
-    currentIndex++;
+    var file = files[currentFileIdx];
+    var chunkSize = 64 * 1024; // 64KB
+    var offset = 0;
 
-    if (file.size > 5 * 1024 * 1024) {
-      toast(`第 ${currentIndex} 首超过 5MB，跳过`, true);
-      setTimeout(uploadNext, 1000);
-      return;
+    dc.send(JSON.stringify({ type: 'file-start', name: file.name }));
+
+    function readChunk() {
+      if (offset >= file.size) {
+        dc.send(JSON.stringify({ type: 'file-end' }));
+        currentFileIdx++;
+        toast('✅ ' + file.name + ' 发送完成');
+        setTimeout(sendNextFile, 500); // 间隔半秒传下一个
+        return;
+      }
+
+      var slice = file.slice(offset, offset + chunkSize);
+      var reader = new FileReader();
+      reader.onload = function(e) {
+        // 等待缓冲区有空位再发送，防止内存溢出
+        if (dc.bufferedAmount > 1024 * 1024) { 
+          setTimeout(function() { 
+            dc.send(e.target.result); 
+            offset += chunkSize; 
+            readChunk(); 
+          }, 50);
+        } else {
+          dc.send(e.target.result);
+          offset += chunkSize;
+          readChunk();
+        }
+      };
+      reader.readAsArrayBuffer(slice);
     }
-
-    var reader = new FileReader();
-    reader.onload = function(e) {
-      var base64Data = e.target.result;
-      toast(`正在发送第 ${currentIndex}/${files.length} 首...`);
-      
-      doSend({ type: 'music-upload', name: file.name, data: base64Data }, function(ok) {
-        if (!ok) toast(`第 ${currentIndex} 首发送失败`, true);
-        // 间隔 1.2 秒发送下一首，防止局域网拥堵
-        setTimeout(uploadNext, 1200);
-      });
-    };
-    reader.onerror = function() {
-      toast(`第 ${currentIndex} 首读取失败`, true);
-      setTimeout(uploadNext, 1000);
-    };
-    reader.readAsDataURL(file);
+    
+    toast('正在发送: ' + file.name);
+    readChunk();
   }
 
-  uploadNext();
-};
+  sendNextFile();
+}
 </script>
 </body>
 </html>
