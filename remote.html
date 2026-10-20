@@ -577,7 +577,6 @@ document.getElementById('mobileMusicUploadBtn').onclick = function() {
 
   var dc = window.filePC.createDataChannel('fileTransfer', { ordered: true });
   dc.binaryType = 'arraybuffer';
-  dc.bufferedAmountLowThreshold = 1024 * 1024; // 1MB 低水位线，防止内存溢出
   
   dc.onopen = function() {
     toast('✅ 通道已建立，开始传输');
@@ -597,11 +596,12 @@ document.getElementById('mobileMusicUploadBtn').onclick = function() {
   });
 };
 
-// 队列传输文件
+// 队列传输文件（流控版）
 function sendFiles(dc, files) {
   var currentFileIdx = 0;
+  var CHUNK_SIZE = 64 * 1024; // 64KB 切片
   
-  function sendNextFile() {
+  function processNextFile() {
     if (currentFileIdx >= files.length) {
       toast('🎉 全部文件发送完成');
       dc.close();
@@ -610,45 +610,45 @@ function sendFiles(dc, files) {
     }
 
     var file = files[currentFileIdx];
-    var chunkSize = 16 * 1024; // 16KB 分块
-    var offset = 0;
-
+    var totalChunks = Math.ceil(file.size / CHUNK_SIZE);
+    var currentChunk = 0;
+    
+    toast('正在发送: ' + file.name);
     dc.send(JSON.stringify({ type: 'file-start', name: file.name }));
 
-    function readChunk() {
-      if (offset >= file.size) {
+    function sendChunk() {
+      if (currentChunk >= totalChunks) {
         dc.send(JSON.stringify({ type: 'file-end' }));
-        currentFileIdx++;
         toast('✅ ' + file.name + ' 发送完成');
-        setTimeout(sendNextFile, 500);
+        currentFileIdx++;
+        setTimeout(processNextFile, 500);
         return;
       }
-
-      var slice = file.slice(offset, offset + chunkSize);
+      
+      // 背压控制：如果缓冲区快满了，暂停发送，等待 50ms 再试
+      if (dc.bufferedAmount > 256 * 1024) {
+        setTimeout(sendChunk, 50);
+        return;
+      }
+      
+      var start = currentChunk * CHUNK_SIZE;
+      var end = Math.min(start + CHUNK_SIZE, file.size);
+      var slice = file.slice(start, end);
+      
       var reader = new FileReader();
       reader.onload = function(e) {
-        // 关键：如果缓冲区快满了，就暂停读取，等水位下降再读
-        if (dc.bufferedAmount > 1024 * 1024) { 
-          dc.onbufferedamountlow = function() {
-            dc.onbufferedamountlow = null;
-            dc.send(e.target.result);
-            offset += chunkSize;
-            readChunk();
-          };
-        } else {
-          dc.send(e.target.result);
-          offset += chunkSize;
-          readChunk();
-        }
+        dc.send(e.target.result);
+        currentChunk++;
+        // 让出主线程，防止卡死 UI
+        setTimeout(sendChunk, 0);
       };
       reader.readAsArrayBuffer(slice);
     }
     
-    toast('正在发送: ' + file.name);
-    readChunk();
+    sendChunk();
   }
-
-  sendNextFile();
+  
+  processNextFile();
 }
 </script>
 </body>
