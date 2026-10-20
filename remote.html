@@ -55,6 +55,12 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
 .admin-warn{font-size:13px;color:#8b949e;line-height:1.7;padding:12px;background:rgba(88,166,255,.06);border-radius:8px;border-left:3px solid var(--accent);margin-bottom:14px;word-break:break-all}
 .admin-warn.danger{color:#f85149;background:rgba(248,81,73,.08);border-left-color:#f85149}
 .count-badge{font-size:12px;font-weight:600;color:var(--accent);background:rgba(88,166,255,.12);padding:3px 9px;border-radius:6px}
+.bg-preview{width:100%;aspect-ratio:16/9;background-size:cover;background-position:center;border-radius:8px;border:1px solid #30363d;background-color:#0d1117;background-image:none;transition:opacity .2s}
+.bg-block{margin-bottom:20px;padding-bottom:16px;border-bottom:1px dashed #30363d}
+.bg-block:last-child{border-bottom:none;padding-bottom:0;margin-bottom:0}
+.bg-actions{display:flex;gap:8px;margin:10px 0}
+.admin-item-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
+.admin-item-idx{font-size:13px;color:#8b949e;font-weight:600}
 @media (max-width: 480px){ .admin-row{grid-template-columns:1fr;} .admin-body{padding:16px 14px 130px;} .admin-card{padding:16px;} .admin-input,.admin-textarea{font-size:16px;} }
 </style>
 </head>
@@ -91,7 +97,6 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
         <input type="file" id="mobileMusicInput" accept="audio/*" multiple style="width:100%; padding:12px; background:#0d1117; border:1px solid #30363d; border-radius:8px; margin-bottom:15px; color:#fff;">
         <button class="admin-btn primary full" id="mobileMusicUploadBtn">🚀 开始上传</button>
 
-        <!-- 上传进度条 -->
         <div id="uploadProgressWrap" style="display:none; margin-top:16px;">
           <div style="display:flex; justify-content:space-between; align-items:center; font-size:13px; color:#c9d1d9; margin-bottom:8px;">
             <span id="uploadFileName" style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap; flex:1; margin-right:10px;">准备中…</span>
@@ -128,9 +133,7 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
 
       <div class="admin-card">
         <div class="admin-card-title">播放列表 <span id="bgMusicCount" class="count-badge">0 首</span></div>
-        <div id="bgMusicList" style="max-height: 300px; overflow-y: auto;">
-          <!-- 列表渲染区域 -->
-        </div>
+        <div id="bgMusicList" style="max-height: 300px; overflow-y: auto;"></div>
       </div>
     </div>
 
@@ -142,7 +145,6 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
 </div>
 <div id="adminToast" class="admin-toast"></div>
 
-<!-- 配对码输入弹窗 -->
 <div class="admin-modal" id="codeModal">
   <div class="admin-modal-inner">
     <div class="admin-modal-title">连接电视</div>
@@ -183,6 +185,51 @@ function toast(msg, isErr){
 }
 var statusEl = document.getElementById('adminStatus');
 function setStatus(txt, cls){ statusEl.textContent = txt; statusEl.className = 'admin-status' + (cls ? ' ' + cls : ''); }
+
+function formatBytes(bytes) {
+  if (!bytes || bytes < 0) return '0 B';
+  if (bytes < 1024) return bytes + ' B';
+  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+  if (bytes < 1024 * 1024 * 1024) return (bytes / (1024*1024)).toFixed(2) + ' MB';
+  return (bytes / (1024*1024*1024)).toFixed(2) + ' GB';
+}
+
+/* 图片压缩：宽高不超过 maxW/maxH；若体积过大自动降质 */
+function compressImage(file, maxW, maxH, quality, cb) {
+  var img = new Image();
+  var url = URL.createObjectURL(file);
+  img.onload = function() {
+    try {
+      var w = img.naturalWidth || img.width;
+      var h = img.naturalHeight || img.height;
+      if (!w || !h) { URL.revokeObjectURL(url); cb(null); return; }
+      if (w > maxW || h > maxH) {
+        var r = Math.min(maxW / w, maxH / h);
+        w = Math.round(w * r);
+        h = Math.round(h * r);
+      }
+      var canvas = document.createElement('canvas');
+      canvas.width = w; canvas.height = h;
+      var ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0, w, h);
+      var q = quality;
+      var dataUrl = canvas.toDataURL('image/jpeg', q);
+      // 超过 420KB 就逐步降质，避免 webconnect 消息过大
+      var guard = 0;
+      while (dataUrl.length > 580000 && q > 0.42 && guard < 8) {
+        q -= 0.08; guard++;
+        dataUrl = canvas.toDataURL('image/jpeg', q);
+      }
+      URL.revokeObjectURL(url);
+      cb(dataUrl);
+    } catch(e) {
+      URL.revokeObjectURL(url);
+      cb(null);
+    }
+  };
+  img.onerror = function() { URL.revokeObjectURL(url); cb(null); };
+  img.src = url;
+}
 
 /* ========= Webconnect 连接逻辑 ========= */
 var cc = null;
@@ -279,7 +326,6 @@ if (cc && TARGET_HOST_ID){
           else { toast('✅ 已应用'); }
           return;
         }
-        // 处理大文件传输的信令
         if (m.type === 'file-answer' && window.filePC) {
           window.filePC.setRemoteDescription(new RTCSessionDescription({ type: 'answer', sdp: m.sdp })).catch(function(e){
             console.error('setRemoteDescription Error:', e);
@@ -293,7 +339,6 @@ if (cc && TARGET_HOST_ID){
           window.filePC.addIceCandidate(new RTCIceCandidate(m.candidate)).catch(function(){});
           return;
         }
-        // 处理音乐状态同步
         if (m.type === 'music-state') {
           updateMusicUI(m);
           return;
@@ -334,7 +379,6 @@ function updateMusicUI(state) {
 
   if (!listEl) return;
   
-  // 防止拖动进度条时被打断
   if (document.activeElement !== progressEl) {
     progressEl.max = state.duration || 0;
     progressEl.value = state.currentTime || 0;
@@ -349,7 +393,6 @@ function updateMusicUI(state) {
   
   countEl.textContent = state.playlist.length + ' 首';
   
-  // 重新渲染列表
   listEl.innerHTML = state.playlist.map((song, index) => {
     var isActive = (index === state.currentIndex);
     var bg = isActive ? 'background: rgba(88,166,255,0.15); color: #58a6ff;' : '';
@@ -361,7 +404,6 @@ function updateMusicUI(state) {
     </div>`;
   }).join('') || '<div style="text-align:center; color:#8b949e; padding:20px;">暂无音乐</div>';
 
-  // 高亮当前播放模式
   var singleBtn = document.getElementById('musicModeSingle');
   var listBtn = document.getElementById('musicModeList');
   if (singleBtn && listBtn) {
@@ -451,7 +493,10 @@ function normalizeConfig(saved){
       if (Array.isArray(saved.prices[k].cards)) out.prices[k].cards = saved.prices[k].cards.map(c => ({ name:c.name||'', price:c.price||'', config:c.config||'', accent:c.accent||'#00ff9d' }));
     }
   });
-  if (saved.bg) ['default','morning','night','opacity'].forEach(k => { if (saved.bg[k] !== undefined) out.bg[k] = saved.bg[k]; });
+  if (saved.bg) {
+    ['default','morning','night'].forEach(function(k){ if (typeof saved.bg[k] === 'string') out.bg[k] = saved.bg[k]; });
+    if (typeof saved.bg.opacity === 'number') out.bg.opacity = saved.bg.opacity;
+  }
   if (saved.schedule) ['morningStart','morningEnd','nightStart','nightEnd'].forEach(k => { if (normalizeTimeStr(saved.schedule[k])) out.schedule[k] = normalizeTimeStr(saved.schedule[k]); });
   if (saved.footer) {
     if (Array.isArray(saved.footer.rules)) out.footer.rules = saved.footer.rules;
@@ -533,14 +578,106 @@ function renderAnnounce(){
   document.getElementById('annAddBtn').onclick = () => { syncFromForm(); currentCfg.announcements.push({ cls:'', text:'' }); saveDraft(); renderAnnounce(); };
   document.querySelectorAll('[data-ann-del]').forEach(btn => btn.onclick = () => { syncFromForm(); currentCfg.announcements.splice(parseInt(btn.getAttribute('data-ann-del'),10),1); saveDraft(); renderAnnounce(); });
 }
+
+/* ========= 背景：上传 / 预览 / 透明度 / URL ========= */
 function renderBg(){
-  var c = currentCfg, html = '<div class="admin-card"><div class="admin-card-title">背景图片与透明度</div>';
-  ['default','morning','night'].forEach(key => {
-    html += '<div style="margin-bottom:16px;padding-bottom:16px;border-top:1px dashed #30363d"><div class="admin-label" style="margin-bottom:8px">'+key+'</div><input class="admin-input" data-bind="bg.'+key+'" value="'+esc(c.bg[key])+'"></div>';
+  var c = currentCfg;
+  var labels = { default: '常规时段', morning: '包早时段', night: '包宿时段' };
+  var opacity = (typeof c.bg.opacity === 'number') ? c.bg.opacity : 0.6;
+  var html = '<div class="admin-card"><div class="admin-card-title">背景图片（上传 / 预览 / URL）</div>';
+  ['default','morning','night'].forEach(function(key){
+    var src = c.bg[key] || '';
+    var safeSrc = src.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+    html += '<div class="bg-block">' +
+      '<div class="admin-label" style="margin-bottom:8px;font-weight:600;color:#e6edf3">' + labels[key] + ' <span style="color:#8b949e;font-weight:400">(' + key + ')</span></div>' +
+      '<div class="bg-preview" data-preview="' + key + '" style="' + (safeSrc ? "background-image:url('" + safeSrc + "');" : '') + 'opacity:' + opacity + ';"></div>' +
+      '<div class="bg-actions">' +
+        '<button class="admin-btn small primary" style="flex:1" data-bg-upload="' + key + '">📷 上传本地图片</button>' +
+        '<button class="admin-btn small" style="flex:0 0 auto" data-bg-clear="' + key + '">清空</button>' +
+      '</div>' +
+      '<input type="file" accept="image/*" data-bg-file="' + key + '" style="display:none">' +
+      '<div class="admin-field" style="margin-bottom:0"><label class="admin-label">图片 URL 或 Base64（可直接编辑）</label><textarea class="admin-textarea" data-bind="bg.' + key + '" data-bg-url="' + key + '" style="min-height:54px;font-size:12px;word-break:break-all">' + esc(src) + '</textarea></div>' +
+    '</div>';
   });
-  html += '<div class="admin-field"><label class="admin-label">透明度 (0-1)</label><input class="admin-input" type="number" step="0.1" min="0" max="1" data-bind="bg.opacity" value="'+esc(c.bg.opacity)+'"></div></div>';
+  html += '</div>';
+  
+  html += '<div class="admin-card"><div class="admin-card-title">透明度调节</div>' +
+    '<div class="admin-field" style="margin-bottom:0">' +
+      '<label class="admin-label">当前透明度: <span id="opacityVal" style="color:#58a6ff;font-weight:700">' + opacity + '</span>（0 = 全透明，1 = 不透明）</label>' +
+      '<input type="range" min="0" max="1" step="0.05" value="' + opacity + '" id="opacitySlider" style="width:100%;margin-top:8px;accent-color:#58a6ff">' +
+    '</div>' +
+  '</div>';
+  
   document.getElementById('pane-bg').innerHTML = html;
+  
+  document.querySelectorAll('[data-bg-upload]').forEach(function(btn){
+    btn.onclick = function(){
+      var key = btn.getAttribute('data-bg-upload');
+      var fi = document.querySelector('[data-bg-file="' + key + '"]');
+      if (fi) fi.click();
+    };
+  });
+  
+  document.querySelectorAll('[data-bg-file]').forEach(function(fi){
+    fi.onchange = function(){
+      var key = fi.getAttribute('data-bg-file');
+      var file = fi.files && fi.files[0];
+      if (!file) return;
+      if (!/^image\//i.test(file.type)) { toast('请选择图片文件', true); fi.value=''; return; }
+      toast('正在压缩图片…');
+      compressImage(file, 1920, 1080, 0.82, function(dataUrl){
+        if (!dataUrl) { toast('图片处理失败', true); return; }
+        currentCfg.bg[key] = dataUrl;
+        saveDraft();
+        var preview = document.querySelector('[data-preview="' + key + '"]');
+        if (preview) preview.style.backgroundImage = "url('" + dataUrl + "')";
+        var ta = document.querySelector('[data-bg-url="' + key + '"]');
+        if (ta) ta.value = dataUrl;
+        toast('✅ 图片已就绪（约 ' + formatBytes(Math.round(dataUrl.length * 0.75)) + '），点"保存到电视"生效');
+      });
+      fi.value = '';
+    };
+  });
+  
+  document.querySelectorAll('[data-bg-clear]').forEach(function(btn){
+    btn.onclick = function(){
+      if (!confirm('确定清空该背景？')) return;
+      var key = btn.getAttribute('data-bg-clear');
+      currentCfg.bg[key] = '';
+      saveDraft();
+      var preview = document.querySelector('[data-preview="' + key + '"]');
+      if (preview) preview.style.backgroundImage = 'none';
+      var ta = document.querySelector('[data-bg-url="' + key + '"]');
+      if (ta) ta.value = '';
+      toast('已清空，点"保存到电视"生效');
+    };
+  });
+  
+  document.querySelectorAll('[data-bg-url]').forEach(function(ta){
+    ta.oninput = function(){
+      var key = ta.getAttribute('data-bg-url');
+      var v = ta.value.trim();
+      currentCfg.bg[key] = v;
+      var preview = document.querySelector('[data-preview="' + key + '"]');
+      if (preview) {
+        if (v) preview.style.backgroundImage = "url('" + v.replace(/\\/g, '\\\\').replace(/'/g, "\\'") + "')";
+        else preview.style.backgroundImage = 'none';
+      }
+    };
+  });
+  
+  var slider = document.getElementById('opacitySlider');
+  if (slider) {
+    slider.oninput = function(){
+      var v = parseFloat(this.value);
+      var vEl = document.getElementById('opacityVal');
+      if (vEl) vEl.textContent = v.toFixed(2);
+      document.querySelectorAll('.bg-preview').forEach(function(p){ p.style.opacity = v; });
+      currentCfg.bg.opacity = v;
+    };
+  }
 }
+
 function renderFooter(){
   var c = currentCfg, html = '<div class="admin-card"><div class="admin-card-title">页脚</div>';
   html += '<div class="admin-field"><label class="admin-label">标语</label><input class="admin-input" data-bind="footer.slogan" value="'+esc(c.footer.slogan)+'"></div>';
@@ -554,12 +691,13 @@ function syncFromForm(){
   document.querySelectorAll('#adminApp [data-bind]').forEach(inp => {
     var path = inp.getAttribute('data-bind'), val = inp.value, parts = path.split('.');
     if (parts[0]==='footer' && parts[1]==='rules'){ out.footer.rules = val.split('\n').map(s=>s.trim()).filter(Boolean); return; }
-    if (parts[0]==='bg' && parts[1]==='opacity'){ out.bg.opacity = parseFloat(val)||0.6; return; }
+    if (parts[0]==='bg' && parts[1]==='opacity'){ var op = parseFloat(val); out.bg.opacity = isNaN(op) ? 0.6 : op; return; }
     if (parts[0]==='schedule'){ var t = normalizeTimeStr(val); if(t) out.schedule[parts[1]] = t; return; }
     var obj = out;
     for (var i=0; i<parts.length-1; i++){ obj = obj[parts[i]]; }
     obj[parts[parts.length-1]] = val;
   });
+  out.bg.opacity = currentCfg.bg.opacity;
   currentCfg = normalizeConfig(out);
   return currentCfg;
 }
@@ -574,7 +712,9 @@ document.getElementById('adminTabs').addEventListener('click', function(e){
   document.querySelectorAll('.admin-pane').forEach(p => p.classList.remove('active')); document.getElementById('pane-'+name).classList.add('active');
 });
 
-/* ========= 保存配置 ========= */
+/* ========= 拉取 & 保存 ========= */
+document.getElementById('adminReloadBtn').onclick = function(){ requestConfig(false); };
+
 document.getElementById('adminSendBtn').onclick = function(){
   var cfg = syncFromForm(); saveDraft();
   if (!connected) return toast('未连接电视', true);
@@ -593,18 +733,13 @@ document.getElementById('musicModeSingle').onclick = function() { doSend({ type:
 document.getElementById('musicModeList').onclick = function() { doSend({ type: 'music-command', action: 'mode-list' }); toast('🔁 列表循环'); };
 
 /* --- 上传进度条工具 --- */
-function formatBytes(bytes) {
-  if (!bytes || bytes < 0) return '0 B';
-  if (bytes < 1024) return bytes + ' B';
-  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
-  if (bytes < 1024 * 1024 * 1024) return (bytes / (1024*1024)).toFixed(2) + ' MB';
-  return (bytes / (1024*1024*1024)).toFixed(2) + ' GB';
-}
 var uploadProgressState = { lastTime: 0, lastBytes: 0 };
+
 function showUploadProgress(show) {
   var wrap = document.getElementById('uploadProgressWrap');
   if (wrap) wrap.style.display = show ? 'block' : 'none';
 }
+
 function updateUploadProgress(sentBytes, totalBytes, fileName, fileIdx, fileCount) {
   var pct = totalBytes > 0 ? Math.min(100, (sentBytes / totalBytes) * 100) : 0;
   var bar = document.getElementById('uploadBar');
@@ -612,16 +747,18 @@ function updateUploadProgress(sentBytes, totalBytes, fileName, fileIdx, fileCoun
   var nameEl = document.getElementById('uploadFileName');
   var speedEl = document.getElementById('uploadSpeed');
   var detailEl = document.getElementById('uploadProgressDetail');
+
   if (bar) bar.style.width = pct.toFixed(1) + '%';
   if (pctEl) pctEl.textContent = pct.toFixed(1) + '%';
-  if (nameEl) nameEl.textContent = fileName ? ('(' + (fileIdx+1) + '/' + fileCount + ') ' + fileName) : '连接中…';
+  if (nameEl) nameEl.textContent = fileName ? ('(' + (fileIdx + 1) + '/' + fileCount + ') ' + fileName) : '连接中…';
   if (detailEl) detailEl.textContent = formatBytes(sentBytes) + ' / ' + formatBytes(totalBytes);
+
   var now = Date.now();
   if (uploadProgressState.lastTime && (now - uploadProgressState.lastTime) >= 400) {
     var dt = (now - uploadProgressState.lastTime) / 1000;
     var db = sentBytes - uploadProgressState.lastBytes;
     var speed = db / dt;
-    if (speedEl) speedEl.textContent = '↑ ' + formatBytes(speed) + '/s';
+    if (speedEl) speedEl.textContent = '↑ ' + formatBytes(Math.round(speed)) + '/s';
     uploadProgressState.lastTime = now;
     uploadProgressState.lastBytes = sentBytes;
   }
@@ -637,7 +774,6 @@ document.getElementById('mobileMusicUploadBtn').onclick = function() {
   window.__isUploading = true;
   toast('正在建立 P2P 传输通道...');
 
-  // 初始化进度条
   uploadProgressState.lastTime = Date.now();
   uploadProgressState.lastBytes = 0;
   var totalBytes = 0;
@@ -646,19 +782,19 @@ document.getElementById('mobileMusicUploadBtn').onclick = function() {
   updateUploadProgress(0, totalBytes, '', 0, files.length);
 
   window.filePC = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] });
-  
+
   window.filePC.onicecandidate = function(e) {
     if (e.candidate) doSend({ type: 'file-ice', candidate: e.candidate });
   };
 
   var dc = window.filePC.createDataChannel('fileTransfer', { ordered: true });
   dc.binaryType = 'arraybuffer';
-  
+
   dc.onopen = function() {
     toast('✅ 通道已建立，开始传输');
     sendFiles(dc, files);
   };
-  
+
   dc.onerror = function(e) {
     toast('❌ 传输出错', true);
     showUploadProgress(false);
@@ -676,15 +812,15 @@ document.getElementById('mobileMusicUploadBtn').onclick = function() {
   });
 };
 
-// 队列传输文件（流控版 + 进度条）
+/* 队列传输文件（流控 + 进度条） */
 function sendFiles(dc, files) {
   var currentFileIdx = 0;
-  var CHUNK_SIZE = 64 * 1024; // 64KB 切片
-  
+  var CHUNK_SIZE = 64 * 1024;
+
   var totalBytes = 0;
   for (var fi = 0; fi < files.length; fi++) totalBytes += files[fi].size;
   var sentBytes = 0;
-  
+
   function processNextFile() {
     if (currentFileIdx >= files.length) {
       toast('🎉 全部文件发送完成');
@@ -697,29 +833,28 @@ function sendFiles(dc, files) {
     var file = files[currentFileIdx];
     var totalChunks = Math.ceil(file.size / CHUNK_SIZE);
     var currentChunk = 0;
-    
+
     toast('正在发送: ' + file.name);
-    dc.send(JSON.stringify({ type: 'file-start', name: file.name }));
+    try { dc.send(JSON.stringify({ type: 'file-start', name: file.name })); } catch(err) {}
 
     function sendChunk() {
       if (currentChunk >= totalChunks) {
-        dc.send(JSON.stringify({ type: 'file-end' }));
+        try { dc.send(JSON.stringify({ type: 'file-end' })); } catch(err) {}
         toast('✅ ' + file.name + ' 发送完成');
         currentFileIdx++;
         setTimeout(processNextFile, 500);
         return;
       }
-      
-      // 背压控制
+
       if (dc.bufferedAmount > 256 * 1024) {
         setTimeout(sendChunk, 50);
         return;
       }
-      
+
       var start = currentChunk * CHUNK_SIZE;
       var end = Math.min(start + CHUNK_SIZE, file.size);
       var slice = file.slice(start, end);
-      
+
       var reader = new FileReader();
       reader.onload = function(e) {
         try {
@@ -737,10 +872,10 @@ function sendFiles(dc, files) {
       };
       reader.readAsArrayBuffer(slice);
     }
-    
+
     sendChunk();
   }
-  
+
   processNextFile();
 }
 </script>
