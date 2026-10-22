@@ -59,8 +59,17 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
 .bg-block{margin-bottom:20px;padding-bottom:16px;border-bottom:1px dashed #30363d}
 .bg-block:last-child{border-bottom:none;padding-bottom:0;margin-bottom:0}
 .bg-actions{display:flex;gap:8px;margin:10px 0}
-.admin-item-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
-.admin-item-idx{font-size:13px;color:#8b949e;font-weight:600}
+
+/* 公告卡片专属样式优化 */
+.ann-item-card { background: #1c2128; border: 1px solid #30363d; border-radius: 10px; padding: 14px; margin-bottom: 12px; }
+.ann-item-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+.ann-item-controls { display: flex; align-items: center; gap: 10px; }
+.ann-select { padding: 6px 10px; font-size: 13px; background: #0d1117; color: #e6edf3; border: 1px solid #30363d; border-radius: 6px; outline: none; }
+.ann-select:focus { border-color: var(--accent); }
+.ann-textarea { width: 100%; min-height: 70px; padding: 10px 12px; font-size: 14px; color: #e6edf3; background: #0d1117; border: 1px solid #30363d; border-radius: 8px; outline: none; resize: vertical; line-height: 1.5; }
+.ann-textarea:focus { border-color: var(--accent); }
+
+#uploadProgressWrap { position: fixed; left: 20px; right: 20px; bottom: 80px; z-index: 9999; background: var(--panel); border: 1px solid var(--stroke); border-radius: var(--radius); padding: 16px; box-shadow: 0 10px 30px rgba(0,0,0,0.8); }
 @media (max-width: 480px){ .admin-row{grid-template-columns:1fr;} .admin-body{padding:16px 14px 130px;} .admin-card{padding:16px;} .admin-input,.admin-textarea{font-size:16px;} }
 </style>
 </head>
@@ -92,24 +101,10 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
     
     <div class="admin-pane" id="pane-music">
       <div class="admin-card">
-        <div class="admin-card-title">📁 大文件上传</div>
-        <div class="admin-warn">采用 P2P 分块传输，支持百兆无损音频。上传时请保持手机亮屏并停留在当前页面。</div>
+        <div class="admin-card-title">📁 普通音乐上传</div>
+        <div class="admin-warn">支持百兆无损音频。上传时请保持手机亮屏并停留在当前页面。</div>
         <input type="file" id="mobileMusicInput" accept="audio/*" multiple style="width:100%; padding:12px; background:#0d1117; border:1px solid #30363d; border-radius:8px; margin-bottom:15px; color:#fff;">
         <button class="admin-btn primary full" id="mobileMusicUploadBtn">🚀 开始上传</button>
-
-        <div id="uploadProgressWrap" style="display:none; margin-top:16px;">
-          <div style="display:flex; justify-content:space-between; align-items:center; font-size:13px; color:#c9d1d9; margin-bottom:8px;">
-            <span id="uploadFileName" style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap; flex:1; margin-right:10px;">准备中…</span>
-            <span id="uploadPercent" style="color:#3fb950; font-weight:700; flex-shrink:0;">0%</span>
-          </div>
-          <div style="width:100%; height:12px; background:#0d1117; border-radius:6px; overflow:hidden; border:1px solid #30363d;">
-            <div id="uploadBar" style="width:0%; height:100%; background:linear-gradient(90deg,#238636,#3fb950); transition:width .15s linear;"></div>
-          </div>
-          <div style="display:flex; justify-content:space-between; font-size:11px; color:#8b949e; margin-top:6px;">
-            <span id="uploadSpeed">--</span>
-            <span id="uploadProgressDetail">0 B / 0 B</span>
-          </div>
-        </div>
       </div>
 
       <div class="admin-card">
@@ -144,6 +139,21 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
   </div>
 </div>
 <div id="adminToast" class="admin-toast"></div>
+
+<!-- 全局悬浮进度条 -->
+<div id="uploadProgressWrap" style="display:none;">
+  <div style="display:flex; justify-content:space-between; align-items:center; font-size:13px; color:#c9d1d9; margin-bottom:8px;">
+    <span id="uploadFileName" style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap; flex:1; margin-right:10px;">准备中…</span>
+    <span id="uploadPercent" style="color:#3fb950; font-weight:700; flex-shrink:0;">0%</span>
+  </div>
+  <div style="width:100%; height:12px; background:#0d1117; border-radius:6px; overflow:hidden; border:1px solid #30363d;">
+    <div id="uploadBar" style="width:0%; height:100%; background:linear-gradient(90deg,#238636,#3fb950); transition:width .15s linear;"></div>
+  </div>
+  <div style="display:flex; justify-content:space-between; font-size:11px; color:#8b949e; margin-top:6px;">
+    <span id="uploadSpeed">--</span>
+    <span id="uploadProgressDetail">0 B / 0 B</span>
+  </div>
+</div>
 
 <div class="admin-modal" id="codeModal">
   <div class="admin-modal-inner">
@@ -194,7 +204,7 @@ function formatBytes(bytes) {
   return (bytes / (1024*1024*1024)).toFixed(2) + ' GB';
 }
 
-/* 图片压缩：宽高不超过 maxW/maxH；若体积过大自动降质 */
+/* 图片压缩 */
 function compressImage(file, maxW, maxH, quality, cb) {
   var img = new Image();
   var url = URL.createObjectURL(file);
@@ -214,7 +224,6 @@ function compressImage(file, maxW, maxH, quality, cb) {
       ctx.drawImage(img, 0, 0, w, h);
       var q = quality;
       var dataUrl = canvas.toDataURL('image/jpeg', q);
-      // 超过 420KB 就逐步降质，避免 webconnect 消息过大
       var guard = 0;
       while (dataUrl.length > 580000 && q > 0.42 && guard < 8) {
         q -= 0.08; guard++;
@@ -470,7 +479,7 @@ var DEFAULT_CONFIG = {
     ]}
   },
   bg: { default:'bjsp/常规时段.jpg', morning:'bjsp/包早时段.jpg', night:'bjsp/包宿时段.jpg', opacity: 0.6 },
-  schedule: { morningStart: '07:00', morningEnd: '13:00', nightStart: '21:55', nightEnd: '07:00' },
+  schedule: { morningStart: '07:00', morningEnd: '13:00', nightStart: '21:55', nightEnd: '07:00', morningBanner:'', nightBanner:'', syncMorningTime: false, syncNightTime: false },
   footer: { rules: ['未成年人禁止入内','请携带有效身份证件登记','大厅禁止吸烟','妥善保管个人物品'], slogan: '路飞电竞', phone: '166 0418 6135' }
 };
 
@@ -497,7 +506,13 @@ function normalizeConfig(saved){
     ['default','morning','night'].forEach(function(k){ if (typeof saved.bg[k] === 'string') out.bg[k] = saved.bg[k]; });
     if (typeof saved.bg.opacity === 'number') out.bg.opacity = saved.bg.opacity;
   }
-  if (saved.schedule) ['morningStart','morningEnd','nightStart','nightEnd'].forEach(k => { if (normalizeTimeStr(saved.schedule[k])) out.schedule[k] = normalizeTimeStr(saved.schedule[k]); });
+  if (saved.schedule) {
+    ['morningStart','morningEnd','nightStart','nightEnd'].forEach(k => { if (normalizeTimeStr(saved.schedule[k])) out.schedule[k] = normalizeTimeStr(saved.schedule[k]); });
+    if (typeof saved.schedule.morningBanner === 'string') out.schedule.morningBanner = saved.schedule.morningBanner;
+    if (typeof saved.schedule.nightBanner === 'string') out.schedule.nightBanner = saved.schedule.nightBanner;
+    out.schedule.syncMorningTime = saved.schedule.syncMorningTime === true;
+    out.schedule.syncNightTime = saved.schedule.syncNightTime === true;
+  }
   if (saved.footer) {
     if (Array.isArray(saved.footer.rules)) out.footer.rules = saved.footer.rules;
     if (typeof saved.footer.slogan==='string') out.footer.slogan = saved.footer.slogan;
@@ -555,7 +570,20 @@ function renderSchedule(){
   document.getElementById('pane-schedule').innerHTML =
     '<div class="admin-card"><div class="admin-card-title">时段设置</div>' +
       '<div class="admin-row"><div class="admin-field"><label class="admin-label">包早开始</label><input class="admin-input" type="time" data-bind="schedule.morningStart" value="'+esc(c.schedule.morningStart)+'"></div><div class="admin-field"><label class="admin-label">包早结束</label><input class="admin-input" type="time" data-bind="schedule.morningEnd" value="'+esc(c.schedule.morningEnd)+'"></div></div>' +
+      '<div class="admin-field" style="margin-top:10px;"><label class="admin-label">包早自定义横幅文字 (留空使用默认)</label><input class="admin-input" data-bind="schedule.morningBanner" value="'+esc(c.schedule.morningBanner||'')+'" placeholder="☀️ 早鸟特惠时段"></div>' +
+      '<div class="admin-field" style="flex-direction:row; align-items:center; gap:10px; margin-bottom:20px;"><input type="checkbox" id="chkSyncMorning" data-bind="schedule.syncMorningTime" '+(c.schedule.syncMorningTime?'checked':'')+' style="width:18px;height:18px;"><label for="chkSyncMorning" class="admin-label" style="margin-bottom:0;">屏幕文字同步包早时间</label></div>' +
+
       '<div class="admin-row"><div class="admin-field"><label class="admin-label">包宿开始</label><input class="admin-input" type="time" data-bind="schedule.nightStart" value="'+esc(c.schedule.nightStart)+'"></div><div class="admin-field"><label class="admin-label">包宿结束</label><input class="admin-input" type="time" data-bind="schedule.nightEnd" value="'+esc(c.schedule.nightEnd)+'"></div></div>' +
+      '<div class="admin-field" style="margin-top:10px;"><label class="admin-label">包宿自定义横幅文字 (留空使用默认)</label><input class="admin-input" data-bind="schedule.nightBanner" value="'+esc(c.schedule.nightBanner||'')+'" placeholder="🌙 通宵畅玩时段"></div>' +
+      '<div class="admin-field" style="flex-direction:row; align-items:center; gap:10px; margin-bottom:0;"><input type="checkbox" id="chkSyncNight" data-bind="schedule.syncNightTime" '+(c.schedule.syncNightTime?'checked':'')+' style="width:18px;height:18px;"><label for="chkSyncNight" class="admin-label" style="margin-bottom:0;">屏幕文字同步包宿时间</label></div>' +
+    '</div>' +
+    '<div class="admin-card"><div class="admin-card-title">🎵 时段背景音替换</div>' +
+      '<div class="admin-warn">上传后自动生效，不需要管文件名是什么。</div>' +
+      '<div class="admin-field"><label class="admin-label">包早背景音</label><input type="file" id="fileAudioMorning" accept="audio/*" class="admin-input" style="padding:8px"></div>' +
+      '<button class="admin-btn primary full" style="margin-bottom:15px" onclick="uploadAudioFile(\'morning\', \'fileAudioMorning\')">📤 上传并替换包早音频</button>' +
+      
+      '<div class="admin-field"><label class="admin-label">包宿背景音</label><input type="file" id="fileAudioNight" accept="audio/*" class="admin-input" style="padding:8px"></div>' +
+      '<button class="admin-btn primary full" onclick="uploadAudioFile(\'night\', \'fileAudioNight\')">📤 上传并替换包宿音频</button>' +
     '</div>';
 }
 function renderVIP(){
@@ -568,12 +596,24 @@ function renderVIP(){
   document.getElementById('vipAddBtn').onclick = () => { syncFromForm(); currentCfg.vip.push({ pay:'0', bonus:'' }); saveDraft(); renderVIP(); };
   document.querySelectorAll('[data-vip-del]').forEach(btn => btn.onclick = () => { syncFromForm(); currentCfg.vip.splice(parseInt(btn.getAttribute('data-vip-del'),10),1); saveDraft(); renderVIP(); });
 }
+
 function renderAnnounce(){
-  var c = currentCfg, html = '<div class="admin-card"><div class="admin-card-title">公告栏</div>';
+  var c = currentCfg, html = '<div class="admin-card"><div class="admin-card-title">公告栏管理</div>';
   c.announcements.forEach((a, i) => {
-    html += '<div style="margin-bottom:14px;padding-bottom:14px;border-top:1px dashed #30363d"><div class="admin-item-head"><span class="admin-item-idx">#'+(i+1)+'</span><button class="admin-btn small danger" data-ann-del="'+i+'">删除</button></div><div class="admin-field"><label class="admin-label">颜色</label><select class="admin-input" data-bind="announcements.'+i+'.cls">'+['','pink','yellow','blue','orange'].map(o=>'<option value="'+o+'"'+(a.cls===o?' selected':'')+'>'+(o||'默认')+'</option>').join('')+'</select></div><div class="admin-field"><label class="admin-label">内容</label><textarea class="admin-textarea" data-bind="announcements.'+i+'.text">'+esc(a.text)+'</textarea></div></div>';
+    html += `<div class="ann-item-card">
+      <div class="ann-item-header">
+        <span style="font-size:13px;font-weight:bold;color:#8b949e;">公告 #${i+1}</span>
+        <div class="ann-item-controls">
+          <select class="ann-select" data-bind="announcements.${i}.cls">
+            ${['','pink','yellow','blue','orange'].map(o=>`<option value="${o}" ${a.cls===o?'selected':''}>${o||'默认颜色'}</option>`).join('')}
+          </select>
+          <button class="admin-btn small danger" style="padding:6px 10px;" data-ann-del="${i}">删除</button>
+        </div>
+      </div>
+      <textarea class="ann-textarea" data-bind="announcements.${i}.text" placeholder="输入公告内容...">${esc(a.text)}</textarea>
+    </div>`;
   });
-  html += '<button class="admin-btn small full" id="annAddBtn">+ 新增</button></div>';
+  html += '<button class="admin-btn small full" id="annAddBtn" style="margin-top:10px;">+ 新增公告</button></div>';
   document.getElementById('pane-announce').innerHTML = html;
   document.getElementById('annAddBtn').onclick = () => { syncFromForm(); currentCfg.announcements.push({ cls:'', text:'' }); saveDraft(); renderAnnounce(); };
   document.querySelectorAll('[data-ann-del]').forEach(btn => btn.onclick = () => { syncFromForm(); currentCfg.announcements.splice(parseInt(btn.getAttribute('data-ann-del'),10),1); saveDraft(); renderAnnounce(); });
@@ -633,7 +673,7 @@ function renderBg(){
         if (preview) preview.style.backgroundImage = "url('" + dataUrl + "')";
         var ta = document.querySelector('[data-bg-url="' + key + '"]');
         if (ta) ta.value = dataUrl;
-        toast('✅ 图片已就绪（约 ' + formatBytes(Math.round(dataUrl.length * 0.75)) + '），点"保存到电视"生效');
+        toast('✅ 图片已就绪，点"保存到电视"生效');
       });
       fi.value = '';
     };
@@ -690,9 +730,18 @@ function syncFromForm(){
   var out = deepClone(currentCfg);
   document.querySelectorAll('#adminApp [data-bind]').forEach(inp => {
     var path = inp.getAttribute('data-bind'), val = inp.value, parts = path.split('.');
+    if (inp.type === 'checkbox') { val = inp.checked; }
+    
     if (parts[0]==='footer' && parts[1]==='rules'){ out.footer.rules = val.split('\n').map(s=>s.trim()).filter(Boolean); return; }
     if (parts[0]==='bg' && parts[1]==='opacity'){ var op = parseFloat(val); out.bg.opacity = isNaN(op) ? 0.6 : op; return; }
-    if (parts[0]==='schedule'){ var t = normalizeTimeStr(val); if(t) out.schedule[parts[1]] = t; return; }
+    if (parts[0]==='schedule'){ 
+      if (['morningStart','morningEnd','nightStart','nightEnd'].includes(parts[1])) {
+        var t = normalizeTimeStr(val); if(t) out.schedule[parts[1]] = t;
+      } else {
+        out.schedule[parts[1]] = val;
+      }
+      return; 
+    }
     var obj = out;
     for (var i=0; i<parts.length-1; i++){ obj = obj[parts[i]]; }
     obj[parts[parts.length-1]] = val;
@@ -764,12 +813,11 @@ function updateUploadProgress(sentBytes, totalBytes, fileName, fileIdx, fileCoun
   }
 }
 
-/* --- 上传入口 --- */
-document.getElementById('mobileMusicUploadBtn').onclick = function() {
+/* --- 核心 P2P 上传函数 --- */
+window.startP2PUpload = function(files, targetType) {
   if (window.__isUploading) return toast('正在上传中，请等待完成', true);
-  var files = document.getElementById('mobileMusicInput').files;
-  if (!files || files.length === 0) return toast('请先选择音频文件', true);
   if (!connected) return toast('未连接电视，无法发送', true);
+  if (!files || files.length === 0) return;
 
   window.__isUploading = true;
   toast('正在建立 P2P 传输通道...');
@@ -792,7 +840,7 @@ document.getElementById('mobileMusicUploadBtn').onclick = function() {
 
   dc.onopen = function() {
     toast('✅ 通道已建立，开始传输');
-    sendFiles(dc, files);
+    sendFiles(dc, files, targetType);
   };
 
   dc.onerror = function(e) {
@@ -812,8 +860,8 @@ document.getElementById('mobileMusicUploadBtn').onclick = function() {
   });
 };
 
-/* 队列传输文件（流控 + 进度条） */
-function sendFiles(dc, files) {
+/* 队列传输文件 */
+function sendFiles(dc, files, targetType) {
   var currentFileIdx = 0;
   var CHUNK_SIZE = 64 * 1024;
 
@@ -823,7 +871,7 @@ function sendFiles(dc, files) {
 
   function processNextFile() {
     if (currentFileIdx >= files.length) {
-      toast('🎉 全部文件发送完成');
+      toast('🎉 文件发送完成');
       if (window.filePC) { try { window.filePC.close(); } catch(e){} window.filePC = null; }
       window.__isUploading = false;
       setTimeout(function() { showUploadProgress(false); }, 2000);
@@ -835,7 +883,7 @@ function sendFiles(dc, files) {
     var currentChunk = 0;
 
     toast('正在发送: ' + file.name);
-    try { dc.send(JSON.stringify({ type: 'file-start', name: file.name })); } catch(err) {}
+    try { dc.send(JSON.stringify({ type: 'file-start', name: file.name, targetType: targetType })); } catch(err) {}
 
     function sendChunk() {
       if (currentChunk >= totalChunks) {
@@ -878,6 +926,20 @@ function sendFiles(dc, files) {
 
   processNextFile();
 }
+
+/* 普通音乐上传 */
+document.getElementById('mobileMusicUploadBtn').onclick = function() {
+  var files = document.getElementById('mobileMusicInput').files;
+  if (!files || files.length === 0) return toast('请先选择音频文件', true);
+  startP2PUpload(files, '');
+};
+
+/* 时段音频上传 */
+window.uploadAudioFile = function(targetType, inputId) {
+  var input = document.getElementById(inputId);
+  if (!input.files || input.files.length === 0) return toast('请先选择音频文件', true);
+  startP2PUpload(input.files, targetType);
+};
 </script>
 </body>
 </html>
