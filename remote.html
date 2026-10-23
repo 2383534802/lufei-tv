@@ -93,6 +93,7 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
       <button class="admin-tab" data-tab="bg">背景</button>
       <button class="admin-tab" data-tab="footer">页脚</button>
       <button class="admin-tab" data-tab="music">🎵 音乐控制</button>
+      <button class="admin-tab" data-tab="backup">💾 数据备份</button>
       <button class="admin-tab" onclick="location.href='https://page.goose.cc.cd/s/dj'">对讲</button>
     </div>
     
@@ -139,6 +140,21 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
       <div class="admin-card">
         <div class="admin-card-title">播放列表 <span id="bgMusicCount" class="count-badge">0 首</span></div>
         <div id="bgMusicList" style="max-height: 300px; overflow-y: auto;"></div>
+      </div>
+    </div>
+
+    <div class="admin-pane" id="pane-backup">
+      <div class="admin-card">
+        <div class="admin-card-title">💾 导出当前配置</div>
+        <div class="admin-warn">导出包含品牌、价格、公告、时段、背景图（Base64）等所有数据。如果背景图过大，文件可能会稍大。</div>
+        <button class="admin-btn primary full" id="btnExportData" style="margin-top: 10px; padding: 15px;">⬇️ 下载备份文件 (.json)</button>
+      </div>
+
+      <div class="admin-card">
+        <div class="admin-card-title">📥 恢复备份文件</div>
+        <div class="admin-warn danger">导入备份会覆盖当前正在编辑的所有配置。导入后请务必点击底部的「💾 保存到电视」进行下发。</div>
+        <input type="file" id="importFileInput" accept=".json" style="display:none;">
+        <button class="admin-btn full" id="btnImportTrigger" style="margin-top: 10px; padding: 15px; background: #30363d;">📂 选择本地备份文件</button>
       </div>
     </div>
 
@@ -556,7 +572,7 @@ if (!currentCfg) currentCfg = deepClone(DEFAULT_CONFIG);
 function saveDraft(){ try { localStorage.setItem('lufei_admin_draft', JSON.stringify(currentCfg)); } catch(e){} }
 
 function renderAdminAll(){
-  renderBasic(); renderPrices(); renderSchedule(); renderVIP(); renderAnnounce(); renderBg(); renderFooter();
+  renderBasic(); renderPrices(); renderSchedule(); renderVIP(); renderAnnounce(); renderBg(); renderFooter(); renderBackup();
 }
 function renderBasic(){
   var c = currentCfg;
@@ -754,6 +770,61 @@ function renderFooter(){
   document.getElementById('pane-footer').innerHTML = html;
 }
 
+function renderBackup(){
+  document.getElementById('pane-backup').innerHTML =
+    '<div class="admin-card">' +
+      '<div class="admin-card-title">💾 导出当前配置</div>' +
+      '<div class="admin-warn">导出包含品牌、价格、公告、时段、背景图（Base64）等所有数据。如果背景图过大，文件可能会稍大。</div>' +
+      '<button class="admin-btn primary full" id="btnExportData" style="margin-top: 10px; padding: 15px;">⬇️ 下载备份文件 (.json)</button>' +
+    '</div>' +
+    '<div class="admin-card">' +
+      '<div class="admin-card-title">📥 恢复备份文件</div>' +
+      '<div class="admin-warn danger">导入备份会覆盖当前正在编辑的所有配置。导入后请务必点击底部的「💾 保存到电视」进行下发。</div>' +
+      '<input type="file" id="importFileInput" accept=".json" style="display:none;">' +
+      '<button class="admin-btn full" id="btnImportTrigger" style="margin-top: 10px; padding: 15px; background: #30363d;">📂 选择本地备份文件</button>' +
+    '</div>';
+  
+  document.getElementById('btnExportData').onclick = function() {
+    var cfg = syncFromForm();
+    var dataStr = JSON.stringify(cfg, null, 2);
+    var blob = new Blob([dataStr], { type: "application/json" });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    var now = new Date();
+    var dateStr = now.getFullYear() + String(now.getMonth()+1).padStart(2,'0') + String(now.getDate()).padStart(2,'0') + '_' + String(now.getHours()).padStart(2,'0') + String(now.getMinutes()).padStart(2,'0');
+    a.href = url;
+    a.download = '路飞电竞_配置备份_' + dateStr + '.json';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    toast('✅ 备份文件已下载');
+  };
+
+  document.getElementById('btnImportTrigger').onclick = function() {
+    document.getElementById('importFileInput').click();
+  };
+
+  document.getElementById('importFileInput').onchange = function(e) {
+    var file = e.target.files[0];
+    if (!file) return;
+    var reader = new FileReader();
+    reader.onload = function(evt) {
+      try {
+        var parsed = JSON.parse(evt.target.result);
+        currentCfg = normalizeConfig(parsed);
+        saveDraft();
+        renderAdminAll();
+        toast('✅ 数据已恢复，请点击保存到电视');
+      } catch(err) {
+        toast('❌ 文件格式错误，无法恢复', true);
+      }
+      e.target.value = ''; // 允许重复选同一个文件
+    };
+    reader.readAsText(file);
+  };
+}
+
 function syncFromForm(){
   var out = deepClone(currentCfg);
   document.querySelectorAll('#adminApp [data-bind]').forEach(inp => {
@@ -785,6 +856,7 @@ renderAdminAll();
 document.getElementById('adminTabs').addEventListener('click', function(e){
   var tab = e.target.closest('.admin-tab'); if(!tab) return;
   var name = tab.getAttribute('data-tab');
+  if (!name) return; // 如果是跳转链接，不处理
   document.querySelectorAll('.admin-tab').forEach(t => t.classList.remove('active')); tab.classList.add('active');
   document.querySelectorAll('.admin-pane').forEach(p => p.classList.remove('active')); document.getElementById('pane-'+name).classList.add('active');
 });
